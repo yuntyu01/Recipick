@@ -1,0 +1,30 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: recipick-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: recipick
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  api:
+    build: .
+    container_name: recipick-api
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app  # 코드를 수정하면 바로 반영되도록(Hot reload)
+
+volumes:
+  db_data:
