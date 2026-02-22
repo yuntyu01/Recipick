@@ -32,6 +32,42 @@ yarn-error.*
 
 # local env files
 .env*.local
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+.env
+.env.*
 
 # typescript
 *.tsbuildinfo
@@ -41,3 +77,45 @@ app-example
 # generated native folders
 /ios
 /android
+
+__pycache__/
+*.pyc
+########################
+######## 인프라 ########
+########################
+
+# 1. 테라폼 바이너리/플러그인 폴더 
+**/.terraform/*
+
+# 2. 테라폼 상태 파일 
+*.tfstate
+*.tfstate.*
+
+# 3. 변수 파일 (비밀번호)
+*.tfvars
+# 예외: 예시 파일은 올려도 됨
+!example.tfvars  
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+/android
+
+########################
+######## 인프라 ########
+########################
+
+# 1. 테라폼 바이너리/플러그인 폴더 
+**/.terraform/*
+
+# 2. 테라폼 상태 파일 
+*.tfstate
+*.tfstate.*
+
+# 3. 변수 파일 (비밀번호)
+*.tfvars
+# 예외: 예시 파일은 올려도 됨
+!example.tfvars  
