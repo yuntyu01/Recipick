@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BRAND = '#54CDA4';
@@ -19,8 +19,8 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 const TOPBAR_H = 44;
 const VIDEO_H = 210;
-const META_H = 74;
-const TAB_H = 52;
+const META_H = 90; // 제목+유튜버 영역 고정 높이
+const TAB_H = 42;
 
 // bottom fixed CTA
 const CTA_BTN_H = 45;
@@ -32,12 +32,31 @@ const ING_GAP = 5;
 const ING_RADIUS = 14;
 const ING_BORDER_W = 1.5;
 
-const SUB_ROW_H = 56; // ✅ 대체품목 넓게
+const SUB_ROW_H = 56;
 const SUB_PAD_V = 12;
+
+function firstString(v: string | string[] | undefined) {
+  if (!v) return '';
+  return Array.isArray(v) ? v[0] ?? '' : v;
+}
 
 export default function CreateLink() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // ✅ 홈에서 넘어온 params
+  const params = useLocalSearchParams();
+  const link = firstString(params.link) || firstString(params.url);
+  const videoId = firstString(params.video_id);
+  const titleParam = firstString(params.title);
+  const channelParam = firstString(params.channel_name);
+  const thumbParam = firstString(params.thumbnail_url);
+
+  // ✅ 썸네일 우선순위: param > videoId로 생성 > fallback 빈값
+  const thumbUrl = thumbParam || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : '');
+
+  const title = titleParam || '제목을 불러오지 못했어요';
+  const channelName = channelParam || '채널명을 불러오지 못했어요';
 
   const [tab, setTab] = useState<TabKey>('recipe');
   const [activeStepIdx, setActiveStepIdx] = useState(0);
@@ -45,27 +64,8 @@ export default function CreateLink() {
   const [expandedIngId, setExpandedIngId] = useState<string | null>(null);
   const [selectedIngItem, setSelectedIngItem] = useState<Record<string, string>>({});
 
-  // ✅ nativeDriver 끔: height/opacity 같이 안정적으로 제어하려고
+  // (스크롤 값은 나중에 쓰고 싶으면 유지 가능)
   const scrollY = useRef(new Animated.Value(0)).current;
-
-  // ✅ 제목/유튜버(meta)만 스크롤하면 사라지게
-  const metaOpacity = scrollY.interpolate({
-    inputRange: [0, 20, 60],
-    outputRange: [1, 0.3, 0],
-    extrapolate: 'clamp',
-  });
-
-  const metaTranslateY = scrollY.interpolate({
-    inputRange: [0, 60],
-    outputRange: [0, -20],
-    extrapolate: 'clamp',
-  });
-
-  const metaH = scrollY.interpolate({
-    inputRange: [0, 60],
-    outputRange: [META_H, 0],
-    extrapolate: 'clamp',
-  });
 
   const steps: Step[] = useMemo(
     () => [
@@ -124,9 +124,12 @@ export default function CreateLink() {
   // ✅ ScrollView 아래 padding: 버튼 가리지 않게
   const contentBottomPad = CTA_BTN_H + CTA_GAP + Math.max(insets.bottom, 10) + 18;
 
+  // ✅ 고정 헤더 총 높이
+  const FIXED_TOP_H = TOPBAR_H + VIDEO_H + META_H + TAB_H;
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      {/* ✅ 상단(영상 + 탭)은 고정 */}
+      {/* ✅ 상단(영상 + meta + 탭)은 고정 */}
       <View style={[styles.fixedTop, { paddingTop: insets.top }]}>
         <View style={styles.topBar}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={14} style={styles.backBtn}>
@@ -134,12 +137,14 @@ export default function CreateLink() {
           </TouchableOpacity>
         </View>
 
+        {/* ✅ 영상(썸네일) 딱 1번만 */}
         <View style={styles.videoWrap} pointerEvents="none">
-          <Image
-            source={{ uri: 'https://img.youtube.com/vi/fJEdS2kkxMg/hqdefault.jpg' }}
-            style={styles.videoImg}
-            resizeMode="cover"
-          />
+          {thumbUrl ? (
+            <Image source={{ uri: thumbUrl }} style={styles.videoImg} resizeMode="cover" />
+          ) : (
+            <View style={[styles.videoImg, { backgroundColor: '#DDE6E6' }]} />
+          )}
+
           <View style={styles.playOverlay}>
             <View style={styles.playCircle}>
               <Ionicons name="play" size={26} color="#fff" />
@@ -148,7 +153,24 @@ export default function CreateLink() {
           <Text style={styles.youtubeBadge}>YouTube</Text>
         </View>
 
-        {/* ✅ 레시피/재료 탭은 무조건 영상 밑에 "한 줄 고정" */}
+        {/* ✅ 제목/유튜버: 영상 아래 + 탭 위 */}
+        <View style={styles.metaFixed}>
+          <Text style={styles.titleText} numberOfLines={2}>
+            {title}
+          </Text>
+
+          <View style={styles.channelRow}>
+            <View style={styles.avatar} />
+            <Text style={styles.channelText} numberOfLines={1}>
+              {channelName}
+            </Text>
+          </View>
+
+          {/* 디버그용 링크 필요하면 잠깐 켜기 */}
+        
+        </View>
+
+        {/* ✅ 레시피/재료 탭 */}
         <View style={styles.tabsWrapFixed}>
           <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('recipe')} style={styles.tabBtn}>
             <Text style={[styles.tabText, tab === 'recipe' && styles.tabTextActive]}>레시피</Text>
@@ -162,12 +184,12 @@ export default function CreateLink() {
         </View>
       </View>
 
-      {/* ✅ 스크롤 컨텐츠는 "탭 아래부터" 시작 */}
+      {/* ✅ 스크롤 컨텐츠는 "고정 헤더 아래부터" */}
       <Animated.ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
-          paddingTop: TOPBAR_H + VIDEO_H + TAB_H, // ✅ 고정 헤더(영상+탭) 아래부터 시작
+          paddingTop: FIXED_TOP_H, // ✅ 여기 중요: insets.top까지 포함
           paddingBottom: contentBottomPad,
         }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
@@ -175,26 +197,6 @@ export default function CreateLink() {
         })}
         scrollEventThrottle={16}
       >
-        {/* ✅ meta(제목/유튜버)는 스크롤하면 사라짐 */}
-        <Animated.View
-          style={[
-            styles.metaOuter,
-            { height: metaH, opacity: metaOpacity, transform: [{ translateY: metaTranslateY }] },
-          ]}
-        >
-          <View style={styles.metaWrap}>
-            <Text style={styles.titleText} numberOfLines={2}>
-              대파 듬뿍! 삼겹살로 만든 ‘대파 제육볶음’
-            </Text>
-            <View style={styles.channelRow}>
-              <View style={styles.avatar} />
-              <Text style={styles.channelText} numberOfLines={1}>
-                백종원 PAIK JONG WON
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
-
         {/* content */}
         <View style={styles.contentWrap}>
           {tab === 'recipe' ? (
@@ -277,7 +279,22 @@ export default function CreateLink() {
 
       {/* ✅ 하단 고정 CTA */}
       <View style={[styles.bottomCta, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <TouchableOpacity activeOpacity={0.9} style={styles.startBtn}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.startBtn}
+          onPress={() => {
+            router.push({
+              pathname: '/cook',
+              params: {
+                video_id: videoId,
+                url: link,
+                title,
+                channel_name: channelName,
+                thumbnail_url: thumbUrl,
+              },
+            });
+          }}
+        >
           <Text style={styles.startText}>요리 시작</Text>
         </TouchableOpacity>
       </View>
@@ -288,12 +305,13 @@ export default function CreateLink() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
 
-  // ✅ fixed video zone (영상 + 탭 고정)
+  // ✅ fixed top
   fixedTop: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
+    width: '100%',
     zIndex: 1000,
     backgroundColor: WHITE,
   },
@@ -310,13 +328,28 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
+  // video
   videoWrap: { width: SCREEN_W, height: VIDEO_H, backgroundColor: '#DDE6E6' },
   videoImg: { width: '100%', height: '100%' },
   playOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   playCircle: { width: 54, height: 54, borderRadius: 27, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   youtubeBadge: { position: 'absolute', right: 10, bottom: 8, fontWeight: '900', color: 'rgba(0,0,0,0.55)' },
 
-  // ✅ tabs fixed under video
+  // meta fixed (영상 아래)
+  metaFixed: {
+    height: META_H,
+    backgroundColor: WHITE,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 10,
+    justifyContent: 'center',
+  },
+  titleText: { fontSize: 15, fontWeight: '900', color: TEXT, flexShrink: 1, lineHeight: 20 },
+  channelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 },
+  avatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#DDE6E6' },
+  channelText: { fontSize: 12, fontWeight: '800', color: TEXT, flexShrink: 1, opacity: 0.9 },
+
+  // tabs
   tabsWrapFixed: {
     height: TAB_H,
     backgroundColor: WHITE,
@@ -325,33 +358,26 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   tabBtn: {
-    width: SCREEN_W / 2, // ✅ 반반 강제 (세로로 절대 안 내려감)
+    width: SCREEN_W / 2,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingTop: 10,
+    paddingTop: 6,
+    paddingBottom: 0,
   },
   tabText: { fontSize: 14, fontWeight: '900', color: TEXT, opacity: 0.55 },
   tabTextActive: { opacity: 1 },
   tabLine: {
-    marginTop: 10,
+    marginTop: 12,
     height: 2,
     width: '100%',
     backgroundColor: 'transparent',
   },
   tabLineActive: { backgroundColor: BRAND },
 
-  // meta
-  metaOuter: { backgroundColor: WHITE, overflow: 'hidden' },
-  metaWrap: { paddingHorizontal: 18, paddingTop: 12, paddingBottom: 10 },
-  titleText: { fontSize: 15, fontWeight: '900', color: TEXT, lineHeight: 20 },
-  channelRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 },
-  avatar: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#DDE6E6' },
-  channelText: { fontSize: 12, fontWeight: '800', color: TEXT, opacity: 0.9 },
-
   // content
-  contentWrap: { backgroundColor: BG, paddingTop: 8 },
+  contentWrap: { backgroundColor: BG, paddingTop: 4 },
 
-  stepCard: { backgroundColor: WHITE, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 },
+  stepCard: { backgroundColor: BG, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14 },
   stepTitle: { fontSize: 20, fontWeight: '900', color: TEXT, marginBottom: 8 },
   stepBody: { fontSize: 15, fontWeight: '700', color: TEXT, lineHeight: 20 },
 
@@ -395,6 +421,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     overflow: 'hidden',
   },
+
   ingRow: { flexDirection: 'row', alignItems: 'center' },
   ingName: { flex: 1, fontSize: 20, fontWeight: '900', color: TEXT },
   ingAmount: { width: 80, textAlign: 'right', fontSize: 16, fontWeight: '800', color: TEXT },

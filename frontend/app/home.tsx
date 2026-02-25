@@ -1,7 +1,7 @@
 // app/home.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Dimensions,
   FlatList,
@@ -150,27 +150,64 @@ const FIGMA_CTA_H = 48;
 
 const FIGMA_QUESTION_GAP = 27;
 
-/* ===== Horizontal cards (피그마 값 고정) =====
-   1번 카드 left = 18
-   2번 카드 left = 257
-   카드폭 = 229
-   => gap = 257 - 18 - 229 = 10
-   썸네일 = 229 x 127
-*/
+/* ===== Horizontal cards ===== */
 const H_LIST_LEFT = s(18);
 const H_LIST_GAP = s(10);
 const H_CARD_W = s(229);
 const H_THUMB_H = s(127);
 
+/* ================== oEmbed helpers ================== */
+type OEmbedRes = {
+  title: string;
+  author_name: string; // 채널명
+  author_url: string;
+  thumbnail_url: string;
+};
+
+function extractYoutubeVideoId(url: string): string | null {
+  const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
+  if (short?.[1]) return short[1];
+
+  const watch = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
+  if (watch?.[1]) return watch[1];
+
+  const shorts = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/);
+  if (shorts?.[1]) return shorts[1];
+
+  const embed = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/);
+  if (embed?.[1]) return embed[1];
+
+  return null;
+}
+
+async function fetchYoutubeOEmbed(youtubeUrl: string): Promise<OEmbedRes> {
+  const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(youtubeUrl)}&format=json`;
+  const res = await fetch(endpoint);
+  if (!res.ok) throw new Error(`oEmbed failed: ${res.status}`);
+  return (await res.json()) as OEmbedRes;
+}
+
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // ✅ 추가: 패널 토글 상태 + 링크 상태
+  // ✅ 패널 토글 상태 + 링크 상태
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [link, setLink] = useState('');
   const isExpanded = link.trim().length > 0;
 
+  // ✅ oEmbed 결과 상태
+  const [oembedLoading, setOembedLoading] = useState(false);
+  const [oembedError, setOembedError] = useState<string | null>(null);
+  const [videoMeta, setVideoMeta] = useState<{
+    videoId: string;
+    title: string;
+    channelName: string;
+    thumbnailUrl?: string;
+  } | null>(null);
+
+  // ✅ debounce timer
+  const oembedTimer = useRef<any>(null);
 
   const TOP_TUNE = s(50);
   const logoTop = insets.top + s(FIGMA_LOGO_T) - TOP_TUNE;
@@ -178,6 +215,85 @@ export default function Home() {
   const ctaTop = insets.top + s(FIGMA_CTA_T) - TOP_TUNE;
 
   const topAreaHeight = ctaTop + s(FIGMA_CTA_H) + s(16);
+
+  const handleLinkChange = (text: string) => {
+    setLink(text);
+    setOembedError(null);
+    setVideoMeta(null);
+
+    if (oembedTimer.current) clearTimeout(oembedTimer.current);
+
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // 유튜브 링크만 먼저 처리
+    const vid = extractYoutubeVideoId(trimmed);
+    if (!vid) return;
+
+    oembedTimer.current = setTimeout(async () => {
+      try {
+        setOembedLoading(true);
+        const data = await fetchYoutubeOEmbed(trimmed);
+        setVideoMeta({
+          videoId: vid,
+          title: data.title,
+          channelName: data.author_name,
+          thumbnailUrl: data.thumbnail_url,
+        });
+      } catch (e) {
+        setOembedError('유튜브 정보를 가져오지 못했어요. 링크를 다시 확인해줘.');
+      } finally {
+        setOembedLoading(false);
+      }
+    }, 400);
+  };
+
+  const handleClosePanel = () => {
+    setLink('');
+    setShowCreatePanel(false);
+    setOembedLoading(false);
+    setOembedError(null);
+    setVideoMeta(null);
+    if (oembedTimer.current) clearTimeout(oembedTimer.current);
+  };
+
+  const handleDone = () => {
+    const trimmed = link.trim();
+    if (!trimmed) return;
+
+    const vid = extractYoutubeVideoId(trimmed);
+
+    // ✅ 유튜브면 oEmbed 메타 확보된 상태에서만 진행
+    if (vid) {
+      if (oembedLoading) return;
+      if (!videoMeta) {
+        setOembedError('유튜브 정보를 아직 못 가져왔어. 잠깐만 다시 시도해줘.');
+        return;
+      }
+
+      router.push({
+        pathname: '/create-link',
+        params: {
+          link: trimmed, // 서버로는 url로 쓰면 됨
+          video_id: videoMeta.videoId,
+          url: trimmed,
+          title: videoMeta.title,
+          channel_name: videoMeta.channelName,
+          thumbnail_url: videoMeta.thumbnailUrl ?? '',
+        },
+      });
+
+      setShowCreatePanel(false);
+      return;
+    }
+
+    // ✅ 유튜브 아닌 경우(인스타 등) 일단 링크만
+    router.push({
+      pathname: '/create-link',
+      params: { link: trimmed, url: trimmed },
+    });
+    setShowCreatePanel(false);
+  };
 
   return (
     <ScrollView
@@ -217,7 +333,6 @@ export default function Home() {
               height: s(FIGMA_CTA_H),
             },
           ]}
-          // ✅ 변경: 페이지 이동 말고 패널 열기
           onPress={() => setShowCreatePanel(true)}
         >
           <Text style={styles.ctaText}>레시피 만들기</Text>
@@ -231,22 +346,38 @@ export default function Home() {
             <View style={styles.createInputRow}>
               <TextInput
                 value={link}
-                onChangeText={setLink}
+                onChangeText={handleLinkChange}
                 placeholder="링크를 붙여넣으면 AI가 레시피로 정리해줘요!"
                 placeholderTextColor="#9AA8A7"
                 style={styles.createInput}
+                autoCapitalize="none"
+                autoCorrect={false}
               />
               <TouchableOpacity
-                onPress={() => {
-                  setLink('');
-                  setShowCreatePanel(false);
-                }}
+                onPress={handleClosePanel}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 style={styles.createClose}
               >
                 <Ionicons name="close" size={18} color="#6B7C7A" />
               </TouchableOpacity>
             </View>
+
+            {/* ✅ oEmbed 미리보기 */}
+            {oembedLoading && <Text style={styles.oembedHint}>유튜브 정보 불러오는 중...</Text>}
+            {!!oembedError && <Text style={styles.oembedError}>{oembedError}</Text>}
+            {!!videoMeta && (
+              <View style={styles.oembedPreview}>
+                <Thumb uri={videoMeta.thumbnailUrl} style={styles.oembedThumb} borderRadius={s(10)} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.oembedTitle} numberOfLines={2}>
+                    {videoMeta.title}
+                  </Text>
+                  <Text style={styles.oembedChannel} numberOfLines={1}>
+                    {videoMeta.channelName}
+                  </Text>
+                </View>
+              </View>
+            )}
 
             {/* 주의사항 (항상 표시) */}
             <View style={styles.createNotice}>
@@ -255,7 +386,7 @@ export default function Home() {
               <Text style={styles.createBullet}>• 분석에는 약 3분의 시간이 걸립니다</Text>
             </View>
 
-            {/* 버튼 영역 (간격 한번에 조절) */}
+            {/* 버튼 영역 */}
             <View style={styles.createButtonsWrap}>
               {isExpanded ? (
                 <View style={styles.createActionRow}>
@@ -267,40 +398,12 @@ export default function Home() {
                     <Text style={styles.createGhostText}>유튜브 바로가기</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    activeOpacity={0.9}
-                    style={styles.createDoneBtn}
-                    onPress={() => {
-                      const trimmed = link.trim();
-                      if (!trimmed) return;
-
-                      router.push({
-                        pathname: '/create-link',
-                        params: { link: trimmed },
-                      });
-
-                      setShowCreatePanel(false);
-                    }}
-                  >
+                  <TouchableOpacity activeOpacity={0.9} style={styles.createDoneBtn} onPress={handleDone}>
                     <Text style={styles.createDoneText}>완료</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={styles.createDoneBtnFull}
-                  onPress={() => {
-                    const trimmed = link.trim();
-                    if (!trimmed) return;
-
-                    router.push({
-                      pathname: '/create-link',
-                      params: { link: trimmed },
-                    });
-
-                    setShowCreatePanel(false);
-                  }}
-                >
+                <TouchableOpacity activeOpacity={0.9} style={styles.createDoneBtnFull} onPress={handleDone}>
                   <Text style={styles.createDoneText}>완료</Text>
                 </TouchableOpacity>
               )}
@@ -309,12 +412,8 @@ export default function Home() {
         </View>
       )}
 
-
-
       {/* ---------- question ---------- */}
-      <Text style={[styles.question, { marginTop: s(FIGMA_QUESTION_GAP) }]}>
-        어떤 요리 찾고 있어요?
-      </Text>
+      <Text style={[styles.question, { marginTop: s(FIGMA_QUESTION_GAP) }]}>어떤 요리 찾고 있어요?</Text>
 
       {/* ---------- categories ---------- */}
       <FlatList
@@ -386,12 +485,10 @@ export default function Home() {
               </View>
 
               <View style={styles.recentRight}>
-                {/* 위 */}
                 <Text style={styles.recentTitle} numberOfLines={2}>
                   {r.title}
                 </Text>
 
-                {/* 중간 */}
                 <View style={styles.channelRow}>
                   <Thumb style={styles.channelAvatar} uri={r.channelAvatarUrl} borderRadius={999} />
                   <Text style={styles.channelName} numberOfLines={1}>
@@ -399,7 +496,6 @@ export default function Home() {
                   </Text>
                 </View>
 
-                {/* 아래 */}
                 <View style={styles.metaRow}>
                   <Meta icon="heart-outline" text={r.likes} />
                   <Meta icon="chatbubble-outline" text={r.comments} />
@@ -415,7 +511,7 @@ export default function Home() {
       </View>
 
       <View style={{ height: s(40) }} />
-    </ScrollView >
+    </ScrollView>
   );
 }
 
@@ -521,7 +617,7 @@ const styles = StyleSheet.create({
     fontSize: s(17),
   },
 
-  // ✅ 추가: create panel styles
+  // ✅ create panel styles
   createPanelWrap: {
     paddingHorizontal: s(18),
     marginTop: s(14),
@@ -563,6 +659,47 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  oembedHint: {
+    marginTop: s(10),
+    paddingHorizontal: s(6),
+    fontSize: s(12),
+    fontWeight: '800',
+    color: SECTION,
+    opacity: 0.8,
+  },
+  oembedError: {
+    marginTop: s(10),
+    paddingHorizontal: s(6),
+    fontSize: s(12),
+    fontWeight: '900',
+    color: '#D14B4B',
+  },
+  oembedPreview: {
+    marginTop: s(12),
+    flexDirection: 'row',
+    gap: s(10),
+    paddingHorizontal: s(6),
+    alignItems: 'center',
+  },
+  oembedThumb: {
+    width: s(88),
+    height: s(50),
+    backgroundColor: THUMB_BG,
+  },
+  oembedTitle: {
+    fontSize: s(12),
+    fontWeight: '900',
+    color: SECTION,
+    lineHeight: s(16),
+  },
+  oembedChannel: {
+    marginTop: s(4),
+    fontSize: s(11),
+    fontWeight: '800',
+    color: SECTION,
+    opacity: 0.75,
+  },
+
   createBullet: {
     fontSize: s(13),
     fontWeight: '700',
@@ -584,7 +721,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: s(6),
   },
 
-
   createGhostBtn: {
     flex: 1,
     height: s(44),
@@ -599,7 +735,6 @@ const styles = StyleSheet.create({
     fontSize: s(13),
     fontWeight: '900',
   },
-
 
   createDoneText: {
     color: '#FFFFFF',
@@ -803,8 +938,9 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     alignSelf: 'flex-end',
   },
+
   createButtonsWrap: {
-    marginTop: s(16),  // ✅ 여기 숫자만 조절하면 1/2버튼 모두 같이 내려감
+    marginTop: s(16),
   },
 
   createActionRow: {
@@ -812,8 +948,6 @@ const styles = StyleSheet.create({
     gap: s(10),
   },
 
-
-  // 1버튼일 때는 가로 꽉 차게 (flex 영향 제거)
   createDoneBtnFull: {
     height: s(44),
     borderRadius: s(14),
@@ -821,6 +955,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-
 });
