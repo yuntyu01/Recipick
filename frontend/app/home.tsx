@@ -2,6 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
+import { analyzeRecipe, waitRecipeCompleted } from './lib/api';
+import { buildYoutubeMetaFromUrl } from './lib/youtube';
 import {
   Dimensions,
   FlatList,
@@ -205,7 +207,8 @@ export default function Home() {
     channelName: string;
     thumbnailUrl?: string;
   } | null>(null);
-
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   // ✅ debounce timer
   const oembedTimer = useRef<any>(null);
 
@@ -220,6 +223,8 @@ export default function Home() {
     setLink(text);
     setOembedError(null);
     setVideoMeta(null);
+    setAnalyzeLoading(false);
+    setAnalyzeError(null);
 
     if (oembedTimer.current) clearTimeout(oembedTimer.current);
 
@@ -251,43 +256,91 @@ export default function Home() {
   const handleClosePanel = () => {
     setLink('');
     setShowCreatePanel(false);
+
     setOembedLoading(false);
     setOembedError(null);
     setVideoMeta(null);
+
+    // ✅ 분석 상태 초기화
+    setAnalyzeLoading(false);
+    setAnalyzeError(null);
+
     if (oembedTimer.current) clearTimeout(oembedTimer.current);
   };
 
-  const handleDone = () => {
+  const handleDone = async () => {
     const trimmed = link.trim();
     if (!trimmed) return;
 
+    setAnalyzeError(null);
+
+    // 유튜브 링크면: 메타 만들고 → 백엔드 분석 요청 → 완료되면 create-link로 이동
     const vid = extractYoutubeVideoId(trimmed);
 
-    // ✅ 유튜브면 oEmbed 메타 확보된 상태에서만 진행
     if (vid) {
-      if (oembedLoading) return;
-      if (!videoMeta) {
-        setOembedError('유튜브 정보를 아직 못 가져왔어. 잠깐만 다시 시도해줘.');
-        return;
+      if (analyzeLoading) return;
+
+      try {
+        setAnalyzeLoading(true);
+
+        // 1) 메타(제목/채널/썸네일) 확보 (oEmbed)
+        //    - 기존에 videoMeta가 있으면 그걸 우선 사용
+        const meta = videoMeta
+          ? {
+            video_id: videoMeta.videoId,
+            original_url: trimmed,
+            title: videoMeta.title,
+            channel_name: videoMeta.channelName,
+            thumbnail_url: videoMeta.thumbnailUrl || `https://img.youtube.com/vi/${videoMeta.videoId}/hqdefault.jpg`,
+          }
+          : await buildYoutubeMetaFromUrl(trimmed);
+
+        // 2) 분석 요청
+        const first = await analyzeRecipe({
+          video_id: meta.video_id,
+          original_url: meta.original_url,
+          sharer_nickname: '테스터', // TODO: 나중에 로그인 닉네임으로 교체
+          title: meta.title,
+          channel_name: meta.channel_name,
+        });
+
+        // 3) PROCESSING이면 폴링해서 COMPLETED 만들기
+        const finalRes =
+          first.status === 'PROCESSING'
+            ? await waitRecipeCompleted(first.video_id, { intervalMs: 1500, timeoutMs: 120000 })
+            : first;
+
+        if (finalRes.status === 'FAILED') {
+          setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
+          return;
+        }
+
+        // 4) create-link로 이동 (여기서부터는 너가 만든 UI 그대로 쓰면 됨)
+        router.push({
+          pathname: '/create-link',
+          params: {
+            link: trimmed,
+            url: trimmed,
+            video_id: finalRes.video_id,
+            title: finalRes.title,
+            channel_name: finalRes.channel_name,
+            thumbnail_url: finalRes.thumbnail_url,
+            // ✅ 나중에 create-link에서 분석 결과 바로 쓰고 싶으면 data도 넘길 수 있는데
+            // expo-router params는 객체가 커지면 힘들어서, 일단 video_id로 create-link에서 GET 호출하는 게 안정적.
+          },
+        });
+
+        setShowCreatePanel(false);
+      } catch (e: any) {
+        setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
+      } finally {
+        setAnalyzeLoading(false);
       }
 
-      router.push({
-        pathname: '/create-link',
-        params: {
-          link: trimmed, // 서버로는 url로 쓰면 됨
-          video_id: videoMeta.videoId,
-          url: trimmed,
-          title: videoMeta.title,
-          channel_name: videoMeta.channelName,
-          thumbnail_url: videoMeta.thumbnailUrl ?? '',
-        },
-      });
-
-      setShowCreatePanel(false);
       return;
     }
 
-    // ✅ 유튜브 아닌 경우(인스타 등) 일단 링크만
+    // 유튜브 아닌 경우(인스타 등): 현재는 링크만 넘김
     router.push({
       pathname: '/create-link',
       params: { link: trimmed, url: trimmed },
@@ -378,6 +431,18 @@ export default function Home() {
                 </View>
               </View>
             )}
+            {/* ✅ 분석 상태 */}
+            {analyzeLoading && (
+              <Text style={styles.oembedHint}>
+                레시피 분석 중... (보통 1~2분 걸려요)
+              </Text>
+            )}
+
+            {!!analyzeError && (
+              <Text style={styles.oembedError}>
+                {analyzeError}
+              </Text>
+            )}
 
             {/* 주의사항 (항상 표시) */}
             <View style={styles.createNotice}>
@@ -398,13 +463,33 @@ export default function Home() {
                     <Text style={styles.createGhostText}>유튜브 바로가기</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity activeOpacity={0.9} style={styles.createDoneBtn} onPress={handleDone}>
-                    <Text style={styles.createDoneText}>완료</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={[
+                      styles.createDoneBtn,
+                      analyzeLoading && { opacity: 0.5 },
+                    ]}
+                    onPress={handleDone}
+                    disabled={analyzeLoading}
+                  >
+                    <Text style={styles.createDoneText}>
+                      {analyzeLoading ? '분석중...' : '완료'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <TouchableOpacity activeOpacity={0.9} style={styles.createDoneBtnFull} onPress={handleDone}>
-                  <Text style={styles.createDoneText}>완료</Text>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={[
+                    styles.createDoneBtnFull,
+                    analyzeLoading && { opacity: 0.5 },
+                  ]}
+                  onPress={handleDone}
+                  disabled={analyzeLoading}
+                >
+                  <Text style={styles.createDoneText}>
+                    {analyzeLoading ? '분석중...' : '완료'}
+                  </Text>
                 </TouchableOpacity>
               )}
             </View>
