@@ -1,21 +1,33 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 
-export default function Launch() {
+export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      router.replace('/home'); // 👉 홈으로 이동
-    }, 1200); // 1.2초
+    const boot = async () => {
+      // 런치 연출
+      await new Promise((r) => setTimeout(r, 800));
 
-    return () => clearTimeout(t);
+      const hasOnboarded = await SecureStore.getItemAsync('hasOnboarded');
+      if (!hasOnboarded) {
+        router.replace('/onboarding'); // ✅ 처음만 온보딩
+        return;
+      }
+
+      const token = await SecureStore.getItemAsync('accessToken');
+      router.replace(token ? '/home' : '/login');
+    };
+
+    boot();
   }, []);
 
   return (
     <View style={styles.container}>
       <Text style={styles.logo}>Recipick!</Text>
+      <ActivityIndicator color="#fff" style={{ marginTop: 20 }} />
     </View>
   );
 }
