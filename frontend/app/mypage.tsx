@@ -2,6 +2,7 @@ import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /* ================== FIGMA SCALE (430 기준) ================== */
@@ -23,14 +24,9 @@ const AVATAR_BG = "#E9ECEF";
 export default function MyPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
-  // ✅ JSX 밖(컴포넌트 안)에 함수 선언해야 함
   const handleLogout = async () => {
-    // TODO: SecureStore/AsyncStorage에서 토큰 삭제
-    // await SecureStore.deleteItemAsync("accessToken");
-    // await SecureStore.deleteItemAsync("refreshToken");
-
-    router.replace("/login"); // 너 프로젝트 로그인 경로로 맞춰
+    await SecureStore.deleteItemAsync("accessToken");
+    router.replace("/login");
   };
 
   return (
@@ -76,7 +72,6 @@ export default function MyPage() {
         <TouchableOpacity onPress={handleLogout}>
           <Text style={styles.linkText}>로그아웃</Text>
         </TouchableOpacity>
-
         <TouchableOpacity onPress={() => router.push("/withdraw")}>
           <Text style={styles.withdrawText}>회원탈퇴</Text>
         </TouchableOpacity>

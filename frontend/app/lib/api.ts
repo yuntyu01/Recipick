@@ -1,13 +1,6 @@
 // frontend/app/lib/api.ts
 
-const AWS_BASE_URL = 'https://mfxiwq8mpg.execute-api.ap-northeast-2.amazonaws.com';
-
-// ✅ 너 PC IP (아이폰 Expo Go에서 로컬 백엔드 붙이려면 이게 필요)
-const LAN_IP = '192.168.0.13';
-const LOCAL_BASE_URL = `http://${LAN_IP}:8000`;
-
-// ✅ 개발 모드면 로컬로, 아니면 AWS로
-export const BASE_URL = __DEV__ ? LOCAL_BASE_URL : AWS_BASE_URL;
+const BASE_URL = 'https://mfxiwq8mpg.execute-api.ap-northeast-2.amazonaws.com';
 
 export type RecipeStatus = 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
@@ -21,8 +14,8 @@ export type RecipeAnalyzeRequest = {
 
 export type RecipeStep = {
   video_timestamp: string; // "00:07"
-  step: string;            // "1"
-  timer_sec: string;       // "1800"
+  step: string; // "1"
+  timer_sec: string; // "1800"
   desc: string;
 };
 
@@ -87,13 +80,30 @@ export type RecipeAnalyzeResponse = {
 
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${path}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts?.headers ?? {}),
-    },
+
+  console.log('[API REQUEST]', {
+    method: opts?.method ?? 'GET',
+    url,
+    body: opts?.body,
   });
+
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      ...opts,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(opts?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    console.error('[API NETWORK ERROR]', error);
+    throw new Error(
+      '서버에 연결하지 못했어요. 주소가 틀렸거나 서버가 응답하지 않는 상태일 수 있어요.'
+    );
+  }
 
   const text = await res.text();
   let json: any = null;
@@ -101,14 +111,22 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   try {
     json = text ? JSON.parse(text) : null;
   } catch {
-    // 서버가 text로만 주는 경우 대비
-    json = text as any;
+    json = text;
   }
+
+  console.log('[API RESPONSE]', {
+    method: opts?.method ?? 'GET',
+    url,
+    status: res.status,
+    ok: res.ok,
+    data: json,
+  });
 
   if (!res.ok) {
     const msg =
-      (json && (json.detail || json.message)) ||
+      (json && (json.detail || json.message || json.error)) ||
       `HTTP ${res.status} ${res.statusText}`;
+
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
 
@@ -126,29 +144,34 @@ export async function analyzeRecipe(
 }
 
 /** 레시피 조회 (GET /api/recipes/{video_id}) */
-export async function getRecipe(videoId: string): Promise<RecipeAnalyzeResponse> {
+export async function getRecipe(
+  videoId: string
+): Promise<RecipeAnalyzeResponse> {
   return request<RecipeAnalyzeResponse>(
     `/api/recipes/${encodeURIComponent(videoId)}`,
-    { method: 'GET' }
+    {
+      method: 'GET',
+    }
   );
 }
 
 /**
- * PROCESSING이면 폴링해서 COMPLETED/FAILED로 만들어줌
- * - intervalMs: 몇 ms마다 확인할지
- * - timeoutMs: 몇 ms 지나면 타임아웃
+ * PROCESSING이면 폴링해서 COMPLETED/FAILED 될 때까지 기다림
  */
 export async function waitRecipeCompleted(
   videoId: string,
   opts?: { intervalMs?: number; timeoutMs?: number }
 ): Promise<RecipeAnalyzeResponse> {
   const intervalMs = opts?.intervalMs ?? 1500;
-  const timeoutMs = opts?.timeoutMs ?? 60_000; // 1분 기본
+  const timeoutMs = opts?.timeoutMs ?? 180000; // 3분
   const started = Date.now();
 
   while (true) {
-    const r = await getRecipe(videoId);
-    if (r.status === 'COMPLETED' || r.status === 'FAILED') return r;
+    const result = await getRecipe(videoId);
+
+    if (result.status === 'COMPLETED' || result.status === 'FAILED') {
+      return result;
+    }
 
     if (Date.now() - started > timeoutMs) {
       throw new Error('분석 시간이 너무 오래 걸려서 중단했어요. 잠시 후 다시 시도해줘.');

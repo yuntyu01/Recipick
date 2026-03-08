@@ -1,9 +1,9 @@
-// app/home.tsx
+// frontend/app/home.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import { analyzeRecipe, waitRecipeCompleted } from './lib/api';
-import { buildYoutubeMetaFromUrl } from './lib/youtube';
+import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from './lib/youtube';
 import {
   Dimensions,
   FlatList,
@@ -158,47 +158,14 @@ const H_LIST_GAP = s(10);
 const H_CARD_W = s(229);
 const H_THUMB_H = s(127);
 
-/* ================== oEmbed helpers ================== */
-type OEmbedRes = {
-  title: string;
-  author_name: string; // 채널명
-  author_url: string;
-  thumbnail_url: string;
-};
-
-function extractYoutubeVideoId(url: string): string | null {
-  const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]{6,})/);
-  if (short?.[1]) return short[1];
-
-  const watch = url.match(/[?&]v=([a-zA-Z0-9_-]{6,})/);
-  if (watch?.[1]) return watch[1];
-
-  const shorts = url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]{6,})/);
-  if (shorts?.[1]) return shorts[1];
-
-  const embed = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]{6,})/);
-  if (embed?.[1]) return embed[1];
-
-  return null;
-}
-
-async function fetchYoutubeOEmbed(youtubeUrl: string): Promise<OEmbedRes> {
-  const endpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(youtubeUrl)}&format=json`;
-  const res = await fetch(endpoint);
-  if (!res.ok) throw new Error(`oEmbed failed: ${res.status}`);
-  return (await res.json()) as OEmbedRes;
-}
-
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // ✅ 패널 토글 상태 + 링크 상태
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [link, setLink] = useState('');
   const isExpanded = link.trim().length > 0;
 
-  // ✅ oEmbed 결과 상태
   const [oembedLoading, setOembedLoading] = useState(false);
   const [oembedError, setOembedError] = useState<string | null>(null);
   const [videoMeta, setVideoMeta] = useState<{
@@ -207,16 +174,16 @@ export default function Home() {
     channelName: string;
     thumbnailUrl?: string;
   } | null>(null);
+
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
-  // ✅ debounce timer
+
   const oembedTimer = useRef<any>(null);
 
   const TOP_TUNE = s(50);
   const logoTop = insets.top + s(FIGMA_LOGO_T) - TOP_TUNE;
   const profileTop = insets.top + s(FIGMA_PROFILE_T) - TOP_TUNE;
   const ctaTop = insets.top + s(FIGMA_CTA_T) - TOP_TUNE;
-
   const topAreaHeight = ctaTop + s(FIGMA_CTA_H) + s(16);
 
   const handleLinkChange = (text: string) => {
@@ -231,19 +198,20 @@ export default function Home() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
-    // 유튜브 링크만 먼저 처리
-    const vid = extractYoutubeVideoId(trimmed);
+    const vid = extractYouTubeVideoId(trimmed);
     if (!vid) return;
 
     oembedTimer.current = setTimeout(async () => {
       try {
         setOembedLoading(true);
-        const data = await fetchYoutubeOEmbed(trimmed);
+
+        const meta = await buildYoutubeMetaFromUrl(trimmed);
+
         setVideoMeta({
-          videoId: vid,
-          title: data.title,
-          channelName: data.author_name,
-          thumbnailUrl: data.thumbnail_url,
+          videoId: meta.video_id,
+          title: meta.title,
+          channelName: meta.channel_name,
+          thumbnailUrl: meta.thumbnail_url,
         });
       } catch (e) {
         setOembedError('유튜브 정보를 가져오지 못했어요. 링크를 다시 확인해줘.');
@@ -261,7 +229,6 @@ export default function Home() {
     setOembedError(null);
     setVideoMeta(null);
 
-    // ✅ 분석 상태 초기화
     setAnalyzeLoading(false);
     setAnalyzeError(null);
 
@@ -270,83 +237,83 @@ export default function Home() {
 
   const handleDone = async () => {
     const trimmed = link.trim();
-    if (!trimmed) return;
 
-    setAnalyzeError(null);
-
-    // 유튜브 링크면: 메타 만들고 → 백엔드 분석 요청 → 완료되면 create-link로 이동
-    const vid = extractYoutubeVideoId(trimmed);
-
-    if (vid) {
-      if (analyzeLoading) return;
-
-      try {
-        setAnalyzeLoading(true);
-
-        // 1) 메타(제목/채널/썸네일) 확보 (oEmbed)
-        //    - 기존에 videoMeta가 있으면 그걸 우선 사용
-        const meta = videoMeta
-          ? {
-            video_id: videoMeta.videoId,
-            original_url: trimmed,
-            title: videoMeta.title,
-            channel_name: videoMeta.channelName,
-            thumbnail_url: videoMeta.thumbnailUrl || `https://img.youtube.com/vi/${videoMeta.videoId}/hqdefault.jpg`,
-          }
-          : await buildYoutubeMetaFromUrl(trimmed);
-
-        // 2) 분석 요청
-        const first = await analyzeRecipe({
-          video_id: meta.video_id,
-          original_url: meta.original_url,
-          sharer_nickname: '테스터', // TODO: 나중에 로그인 닉네임으로 교체
-          title: meta.title,
-          channel_name: meta.channel_name,
-        });
-
-        // 3) PROCESSING이면 폴링해서 COMPLETED 만들기
-        const finalRes =
-          first.status === 'PROCESSING'
-            ? await waitRecipeCompleted(first.video_id, { intervalMs: 1500, timeoutMs: 120000 })
-            : first;
-
-        if (finalRes.status === 'FAILED') {
-          setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
-          return;
-        }
-
-        // 4) create-link로 이동 (여기서부터는 너가 만든 UI 그대로 쓰면 됨)
-        router.push({
-          pathname: '/create-link',
-          params: {
-            link: trimmed,
-            url: trimmed,
-            video_id: finalRes.video_id,
-            title: finalRes.title,
-            channel_name: finalRes.channel_name,
-            thumbnail_url: finalRes.thumbnail_url,
-            // ✅ 나중에 create-link에서 분석 결과 바로 쓰고 싶으면 data도 넘길 수 있는데
-            // expo-router params는 객체가 커지면 힘들어서, 일단 video_id로 create-link에서 GET 호출하는 게 안정적.
-          },
-        });
-
-        setShowCreatePanel(false);
-      } catch (e: any) {
-        setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
-      } finally {
-        setAnalyzeLoading(false);
-      }
-
+    if (!trimmed) {
+      setAnalyzeError('링크를 입력해줘.');
       return;
     }
 
-    // 유튜브 아닌 경우(인스타 등): 현재는 링크만 넘김
-    router.push({
-      pathname: '/create-link',
-      params: { link: trimmed, url: trimmed },
-    });
-    setShowCreatePanel(false);
+    setAnalyzeError('');
+
+    try {
+      setAnalyzeLoading(true);
+
+      const videoId = extractYouTubeVideoId(trimmed);
+
+      if (!videoId) {
+        setAnalyzeError('유효한 유튜브 링크가 아니야.');
+        return;
+      }
+
+      // oEmbed나 네 메타 정보가 있으면 활용, 없으면 기본값으로 보정
+      const safeTitle =
+        videoMeta?.title?.trim() ||
+        '제목 없음';
+
+      const safeChannelName =
+        videoMeta?.channelName?.trim() ||
+        '채널명 없음';
+
+      const requestBody = {
+        video_id: videoId,
+        original_url: `https://www.youtube.com/watch?v=${videoId}`,
+        sharer_nickname: '익명',
+        title: safeTitle,
+        channel_name: safeChannelName,
+      };
+
+      console.log('[ANALYZE REQUEST BODY]', requestBody);
+
+      const first = await analyzeRecipe(requestBody);
+
+      console.log('[ANALYZE FIRST RESPONSE]', first);
+
+      const finalRes =
+        first.status === 'PROCESSING'
+          ? await waitRecipeCompleted(first.video_id, {
+            intervalMs: 1500,
+            timeoutMs: 180000,
+          })
+          : first;
+
+      console.log('[ANALYZE FINAL RESPONSE]', finalRes);
+
+      if (finalRes.status === 'FAILED') {
+        setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
+        return;
+      }
+
+      router.push({
+        pathname: '/create-link',
+        params: {
+          link: trimmed,
+          url: trimmed,
+          video_id: finalRes.video_id,
+          title: finalRes.title || safeTitle,
+          channel_name: finalRes.channel_name || safeChannelName,
+          thumbnail_url: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
+        },
+      });
+
+      setShowCreatePanel(false);
+    } catch (e: any) {
+      console.error('[HANDLE DONE ERROR]', e);
+      setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
+    } finally {
+      setAnalyzeLoading(false);
+    }
   };
+
 
   return (
     <ScrollView
@@ -355,7 +322,6 @@ export default function Home() {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
     >
-      {/* ---------- top ---------- */}
       <View style={[styles.topBar, { height: topAreaHeight }]}>
         <Text style={[styles.logo, { top: logoTop }]}>Recipick!</Text>
 
@@ -395,7 +361,6 @@ export default function Home() {
       {showCreatePanel && (
         <View style={styles.createPanelWrap}>
           <View style={styles.createPanel}>
-            {/* 입력 */}
             <View style={styles.createInputRow}>
               <TextInput
                 value={link}
@@ -415,9 +380,9 @@ export default function Home() {
               </TouchableOpacity>
             </View>
 
-            {/* ✅ oEmbed 미리보기 */}
             {oembedLoading && <Text style={styles.oembedHint}>유튜브 정보 불러오는 중...</Text>}
             {!!oembedError && <Text style={styles.oembedError}>{oembedError}</Text>}
+
             {!!videoMeta && (
               <View style={styles.oembedPreview}>
                 <Thumb uri={videoMeta.thumbnailUrl} style={styles.oembedThumb} borderRadius={s(10)} />
@@ -431,27 +396,16 @@ export default function Home() {
                 </View>
               </View>
             )}
-            {/* ✅ 분석 상태 */}
-            {analyzeLoading && (
-              <Text style={styles.oembedHint}>
-                레시피 분석 중... (보통 1~2분 걸려요)
-              </Text>
-            )}
 
-            {!!analyzeError && (
-              <Text style={styles.oembedError}>
-                {analyzeError}
-              </Text>
-            )}
+            {analyzeLoading && <Text style={styles.oembedHint}>레시피 분석 중...</Text>}
+            {!!analyzeError && <Text style={styles.oembedError}>{analyzeError}</Text>}
 
-            {/* 주의사항 (항상 표시) */}
             <View style={styles.createNotice}>
               <Text style={styles.createBullet}>• 지원 가능: 유튜브, 인스타</Text>
               <Text style={styles.createBullet}>• 30분 이상 영상 길이는 분석이 불가능해요</Text>
               <Text style={styles.createBullet}>• 분석에는 약 3분의 시간이 걸립니다</Text>
             </View>
 
-            {/* 버튼 영역 */}
             <View style={styles.createButtonsWrap}>
               {isExpanded ? (
                 <View style={styles.createActionRow}>
@@ -465,31 +419,21 @@ export default function Home() {
 
                   <TouchableOpacity
                     activeOpacity={0.9}
-                    style={[
-                      styles.createDoneBtn,
-                      analyzeLoading && { opacity: 0.5 },
-                    ]}
+                    style={[styles.createDoneBtn, analyzeLoading && { opacity: 0.5 }]}
                     onPress={handleDone}
                     disabled={analyzeLoading}
                   >
-                    <Text style={styles.createDoneText}>
-                      {analyzeLoading ? '분석중...' : '완료'}
-                    </Text>
+                    <Text style={styles.createDoneText}>{analyzeLoading ? '분석중...' : '완료'}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  style={[
-                    styles.createDoneBtnFull,
-                    analyzeLoading && { opacity: 0.5 },
-                  ]}
+                  style={[styles.createDoneBtnFull, analyzeLoading && { opacity: 0.5 }]}
                   onPress={handleDone}
                   disabled={analyzeLoading}
                 >
-                  <Text style={styles.createDoneText}>
-                    {analyzeLoading ? '분석중...' : '완료'}
-                  </Text>
+                  <Text style={styles.createDoneText}>{analyzeLoading ? '분석중...' : '완료'}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -497,10 +441,8 @@ export default function Home() {
         </View>
       )}
 
-      {/* ---------- question ---------- */}
       <Text style={[styles.question, { marginTop: s(FIGMA_QUESTION_GAP) }]}>어떤 요리 찾고 있어요?</Text>
 
-      {/* ---------- categories ---------- */}
       <FlatList
         horizontal
         data={CATEGORIES}
@@ -520,7 +462,6 @@ export default function Home() {
         )}
       />
 
-      {/* ---------- my recipes (가로) ---------- */}
       <SectionHeader title="내 레시피" onPressRight={() => router.push('/mypage')} />
       <FlatList
         horizontal
@@ -536,7 +477,6 @@ export default function Home() {
         )}
       />
 
-      {/* ---------- recommend (가로) ---------- */}
       <SectionHeader title="Recipick! 추천 레시피" onPressRight={() => router.push('/category/추천')} />
       <FlatList
         horizontal
@@ -552,7 +492,6 @@ export default function Home() {
         )}
       />
 
-      {/* ---------- recent ---------- */}
       <Text style={styles.recentHeader}>최근 많이 사용한 레시피</Text>
 
       <View style={styles.recentBox}>
@@ -626,7 +565,6 @@ function HorizontalVideoCard({ data, onPress }: { data: VideoCardData; onPress: 
   );
 }
 
-// (유지용)
 function VideoCard({ data, onPress }: { data: VideoCardData; onPress: () => void }) {
   return (
     <TouchableOpacity activeOpacity={0.92} style={styles.videoCard} onPress={onPress}>
@@ -702,7 +640,6 @@ const styles = StyleSheet.create({
     fontSize: s(17),
   },
 
-  // ✅ create panel styles
   createPanelWrap: {
     paddingHorizontal: s(18),
     marginTop: s(14),
@@ -788,7 +725,7 @@ const styles = StyleSheet.create({
   createBullet: {
     fontSize: s(13),
     fontWeight: '700',
-    color: '#3B4F4E',
+    color: '#3B4F3E',
     lineHeight: s(16),
     marginTop: s(10),
   },
@@ -835,7 +772,6 @@ const styles = StyleSheet.create({
     color: Q_TITLE,
   },
 
-  /* categories */
   categoryList: {
     paddingLeft: s(20),
     paddingRight: s(20),
@@ -856,7 +792,6 @@ const styles = StyleSheet.create({
     color: SECTION,
   },
 
-  /* section header */
   sectionHeader: {
     marginTop: s(14),
     marginBottom: s(10),
@@ -887,7 +822,6 @@ const styles = StyleSheet.create({
     lineHeight: s(14),
   },
 
-  /* ✅ Horizontal cards */
   hVideoCard: {
     width: H_CARD_W,
     backgroundColor: 'transparent',
@@ -904,7 +838,6 @@ const styles = StyleSheet.create({
     lineHeight: s(16),
   },
 
-  /* (유지용) two-col */
   twoCol: {
     flexDirection: 'row',
     gap: s(10),
@@ -929,7 +862,6 @@ const styles = StyleSheet.create({
     lineHeight: s(16),
   },
 
-  /* recent */
   recentHeader: {
     marginTop: s(22),
     marginBottom: s(12),

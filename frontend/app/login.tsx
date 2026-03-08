@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 import { Stack, useRouter } from "expo-router";
 import {
+  Alert,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
@@ -35,11 +37,31 @@ export default function LoginPage() {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
   const [secure, setSecure] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    // TODO: API 붙이기
-    // 성공하면 홈으로
-    router.replace("/home");
+    if (loading) return;
+
+    if (!id.trim() || !pw.trim()) {
+      Alert.alert("확인", "아이디(이메일)와 비밀번호를 입력해줘.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // TODO: 나중에 백엔드 붙이면 여기서 로그인 API 호출 후 받은 토큰 저장
+      // const { accessToken } = await loginApi(id, pw);
+
+      // ✅ 지금은 임시 토큰 저장 (자동로그인 동작 확인용)
+      await SecureStore.setItemAsync("accessToken", "dummy-token");
+
+      router.replace("/home");
+    } catch (e: any) {
+      Alert.alert("로그인 실패", e?.message ?? "다시 시도해줘.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -86,14 +108,23 @@ export default function LoginPage() {
             style={styles.eyeBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name={secure ? "eye-off-outline" : "eye-outline"} size={s(18)} color="#9AA0A6" />
+            <Ionicons
+              name={secure ? "eye-off-outline" : "eye-outline"}
+              size={s(18)}
+              color="#9AA0A6"
+            />
           </TouchableOpacity>
         </View>
 
         <View style={{ height: s(22) }} />
 
-        <TouchableOpacity activeOpacity={0.9} onPress={onLogin} style={styles.btnPrimary}>
-          <Text style={styles.btnPrimaryText}>로그인</Text>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={onLogin}
+          style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+          disabled={loading}
+        >
+          <Text style={styles.btnPrimaryText}>{loading ? "로그인 중..." : "로그인"}</Text>
         </TouchableOpacity>
 
         <View style={{ height: s(10) }} />
@@ -102,13 +133,14 @@ export default function LoginPage() {
           activeOpacity={0.9}
           onPress={() => router.push("/signup")}
           style={styles.btnSecondary}
+          disabled={loading}
         >
           <Text style={styles.btnSecondaryText}>회원가입</Text>
         </TouchableOpacity>
 
         <View style={{ height: s(14) }} />
 
-        <TouchableOpacity activeOpacity={0.7}>
+        <TouchableOpacity activeOpacity={0.7} disabled={loading}>
           <Text style={styles.forgot}>비밀번호를 잊어버리셨나요?</Text>
         </TouchableOpacity>
 
@@ -123,10 +155,10 @@ export default function LoginPage() {
         <View style={{ height: s(14) }} />
 
         <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85} disabled={loading}>
             <Ionicons name="logo-facebook" size={s(18)} color={TEXT_DARK} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85} disabled={loading}>
             <Ionicons name="logo-google" size={s(18)} color={TEXT_DARK} />
           </TouchableOpacity>
         </View>
@@ -135,7 +167,7 @@ export default function LoginPage() {
 
         <View style={styles.bottomRow}>
           <Text style={styles.bottomText}>Don’t have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/signup")}>
+          <TouchableOpacity onPress={() => router.push("/signup")} disabled={loading}>
             <Text style={styles.bottomLink}>Sign Up</Text>
           </TouchableOpacity>
         </View>
