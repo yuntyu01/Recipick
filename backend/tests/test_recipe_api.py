@@ -43,6 +43,48 @@ def test_request_recipe(client, monkeypatch):
     assert res.json()["status"] == "PROCESSING"
 
 
+# 카테고리별 추천 조회 성공 케이스
+def test_get_recommendations_by_category_success(client, monkeypatch):
+    monkeypatch.setattr(
+        recipe_router.recipe_service,
+        "get_recommended_videos_by_category",
+        lambda category, limit=20: [
+            {
+                "video_id": "abc123",
+                "title": "간단 김치볶음밥",
+                "channel_name": "요리왕",
+                "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+                "url": "https://www.youtube.com/watch?v=abc123",
+                "category": category,
+            }
+        ],
+    )
+
+    res = client.get("/api/recipes/recommendations/한식?limit=10")
+    assert res.status_code == 200
+    body = res.json()
+    assert isinstance(body, list)
+    assert body[0]["video_id"] == "abc123"
+    assert body[0]["category"] == "한식"
+
+
+# 지원하지 않는 카테고리 요청 시 400 반환
+def test_get_recommendations_by_category_invalid(client, monkeypatch):
+    from fastapi import HTTPException
+
+    def _raise_invalid(category, limit=20):
+        raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
+
+    monkeypatch.setattr(
+        recipe_router.recipe_service,
+        "get_recommended_videos_by_category",
+        _raise_invalid,
+    )
+
+    res = client.get("/api/recipes/recommendations/기타")
+    assert res.status_code == 400
+
+
 # 레시피 상태 조회 성공 케이스
 def test_get_recipe_success(client, monkeypatch):
     monkeypatch.setattr(

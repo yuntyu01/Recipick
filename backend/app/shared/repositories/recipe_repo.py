@@ -333,3 +333,38 @@ def create_share(video_id: str, user_id: str):
         ExpressionAttributeValues={":inc": 1, ":zero": 0}
     )
     return {"success": True, "created_at": now}
+
+
+def list_recommended_videos_by_category(category: str, limit: int = 20):
+    response = recipe_table.query(
+        IndexName="CategoryIndex",
+        KeyConditionExpression=Key("category").eq(category),
+        ScanIndexForward=False,
+        Limit=max(limit * 3, limit),
+    )
+
+    items = []
+    for item in response.get("Items", []):
+        # CategoryIndex에는 다른 타입 엔티티도 섞일 수 있어 INFO/COMPLETED 레시피만 반환
+        if not str(item.get("PK", "")).startswith("VIDEO#"):
+            continue
+        if item.get("SK") != "INFO":
+            continue
+        if item.get("status") != "COMPLETED":
+            continue
+
+        video_id = str(item.get("PK", "")).replace("VIDEO#", "")
+        items.append(
+            {
+                "video_id": video_id,
+                "title": item.get("title") or "",
+                "channel_name": item.get("channel_name") or "",
+                "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "url": item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "category": item.get("category") or category,
+            }
+        )
+        if len(items) >= limit:
+            break
+
+    return items

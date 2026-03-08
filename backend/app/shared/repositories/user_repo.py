@@ -42,13 +42,30 @@ def add_user_history(
     created_at: Optional[str] = None
 ):
     event_time = created_at or _utc_now_iso()
+    recipe = recipe_table.get_item(
+        Key={
+            "PK": f"VIDEO#{video_id}",
+            "SK": "INFO"
+        }
+    ).get("Item", {})
     item = {
         "PK": f"USER#{user_id}",
         "SK": f"HISTORY#{event_time}",
         "video_id": video_id,
-        "recipe_title": recipe_title,
-        "thumbnail_url": thumbnail_url,
-        "created_at": event_time
+        "recipe_title": recipe.get("title") or recipe_title,
+        "thumbnail_url": recipe.get("thumbnail_url") or thumbnail_url,
+        "created_at": event_time,
+        "saved_at": event_time,
+        "channel_name": recipe.get("channel_name"),
+        "category": recipe.get("category"),
+        "difficulty": recipe.get("difficulty"),
+        "servings": recipe.get("servings"),
+        "total_estimated_price": recipe.get("total_estimated_price"),
+        "total_calorie": recipe.get("total_calorie"),
+        "like_count": recipe.get("like_count", 0),
+        "comment_count": recipe.get("comment_count", 0),
+        "share_count": recipe.get("share_count", 0),
+        "status": recipe.get("status"),
     }
     recipe_table.put_item(Item=item)
     return item

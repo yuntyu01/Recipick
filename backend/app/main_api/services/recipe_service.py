@@ -8,6 +8,7 @@ from app.shared.repositories import recipe_repo
 from app.shared.models.recipe_model import RecipeStatus
 
 sqs = boto3.client('sqs', region_name=settings.REGION)
+SUPPORTED_RECIPE_CATEGORIES = {"한식", "중식", "일식", "양식", "분식", "디저트"}
 
 # Boto3가 숫자 데이터를 가져올 때 Decimal 객체로 가져와서 FastAPI가 500 에러를 뱉는 걸 막음
 def replace_decimals(obj):
@@ -197,3 +198,10 @@ def share_recipe(video_id: str, user_id: str):
         "created_at": result.get("created_at"),
         "already_exists": False
     }
+
+
+def get_recommended_videos_by_category(category: str, limit: int = 20):
+    if category not in SUPPORTED_RECIPE_CATEGORIES:
+        raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
+    items = recipe_repo.list_recommended_videos_by_category(category=category, limit=limit)
+    return replace_decimals(items)

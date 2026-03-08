@@ -54,6 +54,17 @@ def test_post_user_history(client, monkeypatch):
             "recipe_title": recipe_title,
             "thumbnail_url": thumbnail_url,
             "created_at": created_at or "2026-02-26T00:00:00Z",
+            "saved_at": created_at or "2026-02-26T00:00:00Z",
+            "channel_name": "백종원 PAIK JONG WON",
+            "category": "한식",
+            "difficulty": "중",
+            "servings": 2,
+            "total_estimated_price": 12000,
+            "total_calorie": 850,
+            "like_count": 10,
+            "comment_count": 3,
+            "share_count": 1,
+            "status": "COMPLETED",
         },
     )
 
@@ -67,6 +78,9 @@ def test_post_user_history(client, monkeypatch):
     )
     assert res.status_code == 200
     assert res.json()["video_id"] == "abc123"
+    assert res.json()["saved_at"] == "2026-02-26T00:00:00Z"
+    assert res.json()["category"] == "한식"
+    assert res.json()["status"] == "COMPLETED"
 
 
 # 히스토리 목록 조회 케이스
@@ -80,6 +94,17 @@ def test_get_user_history(client, monkeypatch):
                 "recipe_title": "비빔밥",
                 "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
                 "created_at": "2026-02-26T00:00:00Z",
+                "saved_at": "2026-02-26T00:00:00Z",
+                "channel_name": "백종원 PAIK JONG WON",
+                "category": "한식",
+                "difficulty": "중",
+                "servings": 2,
+                "total_estimated_price": 12000,
+                "total_calorie": 850,
+                "like_count": 10,
+                "comment_count": 3,
+                "share_count": 1,
+                "status": "COMPLETED",
             }
         ],
     )
@@ -87,6 +112,8 @@ def test_get_user_history(client, monkeypatch):
     assert res.status_code == 200
     assert isinstance(res.json(), list)
     assert res.json()[0]["video_id"] == "abc123"
+    assert res.json()[0]["saved_at"] == "2026-02-26T00:00:00Z"
+    assert res.json()[0]["channel_name"] == "백종원 PAIK JONG WON"
 
 
 # 활동 목록 조회 케이스

@@ -10,6 +10,83 @@
       "name": "Auth",
       "item": [
         {
+          "name": "Firebase REST SignIn (Get idToken)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.idToken) pm.collectionVariables.set('id_token', data.idToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{firebase_email}}\",\n  \"password\": \"{{firebase_password}}\",\n  \"returnSecureToken\": true\n}"
+            },
+            "url": {
+              "raw": "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={{firebase_api_key}}",
+              "protocol": "https",
+              "host": [
+                "identitytoolkit",
+                "googleapis",
+                "com"
+              ],
+              "path": [
+                "v1",
+                "accounts:signInWithPassword"
+              ],
+              "query": [
+                {
+                  "key": "key",
+                  "value": "{{firebase_api_key}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Firebase Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id_token\": \"{{id_token}}\",\n  \"nickname\": \"요리왕\",\n  \"profile_image\": \"https://cdn.example.com/profiles/u1.png\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/firebase/signup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "firebase",
+                "signup"
+              ]
+            }
+          }
+        },
+        {
           "name": "Firebase Login",
           "request": {
             "method": "POST",
@@ -55,6 +132,29 @@
           ],
           "request": {
             "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{id_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete My App Data",
+          "request": {
+            "method": "DELETE",
             "header": [
               {
                 "key": "Authorization",
@@ -578,6 +678,18 @@
     },
     {
       "key": "comment_id",
+      "value": ""
+    },
+    {
+      "key": "firebase_api_key",
+      "value": ""
+    },
+    {
+      "key": "firebase_email",
+      "value": ""
+    },
+    {
+      "key": "firebase_password",
       "value": ""
     }
   ]

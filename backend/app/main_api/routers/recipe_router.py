@@ -3,6 +3,7 @@ from typing import Optional
 from app.main_api.schemas.recipe_schema import (
     RecipeRequest,
     RecipeResponse,
+    RecipeRecommendationResponse,
     RecipeCommentCreateRequest,
     RecipeCommentUpdateRequest,
     RecipeCommentDeleteRequest,
@@ -24,6 +25,11 @@ def request_recipe(req: RecipeRequest):
         req.title,
         req.channel_name
     )
+
+
+@router.get("/recommendations/{category}", response_model=list[RecipeRecommendationResponse])
+def get_recommendations_by_category(category: str, limit: int = Query(default=20, ge=1, le=100)):
+    return recipe_service.get_recommended_videos_by_category(category=category, limit=limit)
 
 @router.get("/{video_id}", response_model=RecipeResponse)
 def get_recipe_status(video_id: str):

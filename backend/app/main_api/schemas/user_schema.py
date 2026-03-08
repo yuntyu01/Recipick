@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from app.shared.models.recipe_model import RecipeStatus
 
 
 class UserProfileUpsertRequest(BaseModel):
@@ -26,6 +27,17 @@ class UserHistoryResponse(BaseModel):
     recipe_title: str
     thumbnail_url: str
     created_at: str
+    saved_at: str
+    channel_name: Optional[str] = None
+    category: Optional[str] = None
+    difficulty: Optional[str] = None
+    servings: Optional[int] = None
+    total_estimated_price: Optional[int] = None
+    total_calorie: Optional[int] = None
+    like_count: Optional[int] = None
+    comment_count: Optional[int] = None
+    share_count: Optional[int] = None
+    status: Optional[RecipeStatus] = None
 
 
 class UserActivityResponse(BaseModel):

@@ -50,3 +50,12 @@ class RecipeActionResponse(BaseModel):
     user_id: str
     created_at: Optional[str] = None
     already_exists: bool = False
+
+
+class RecipeRecommendationResponse(BaseModel):
+    video_id: str
+    title: str
+    channel_name: str
+    thumbnail_url: str
+    url: str
+    category: str

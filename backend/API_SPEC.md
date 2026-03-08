@@ -97,6 +97,7 @@ Request
 
 ### POST `/api/users/{user_id}/history`
 유저 레시피 사용 이력 저장
+- 요청 본문의 `recipe_title`, `thumbnail_url`는 fallback 값이며, 서버는 가능하면 `video_id`의 레시피 INFO에서 스냅샷을 채워 저장함
 
 Request
 ```json
@@ -104,6 +105,27 @@ Request
   "video_id": "dQw4w9WgXcQ",
   "recipe_title": "간장계란볶음밥",
   "thumbnail_url": "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+}
+```
+
+Response
+```json
+{
+  "video_id": "dQw4w9WgXcQ",
+  "recipe_title": "간장계란볶음밥",
+  "thumbnail_url": "https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+  "created_at": "2026-02-26T12:00:00Z",
+  "saved_at": "2026-02-26T12:00:00Z",
+  "channel_name": "백종원 PAIK JONG WON",
+  "category": "한식",
+  "difficulty": "중",
+  "servings": 2,
+  "total_estimated_price": 12000,
+  "total_calorie": 850,
+  "like_count": 10,
+  "comment_count": 3,
+  "share_count": 1,
+  "status": "COMPLETED"
 }
 ```
 
