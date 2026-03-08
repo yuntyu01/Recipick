@@ -1,8 +1,8 @@
 // frontend/app/home.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
-import { analyzeRecipe, waitRecipeCompleted } from './lib/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { analyzeRecipe, createUserHistory, waitRecipeCompleted } from './lib/api';
 import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from './lib/youtube';
 import {
   Dimensions,
@@ -51,83 +51,46 @@ const CATEGORIES: CategoryItem[] = (Object.keys(CATEGORY_ICONS) as CategoryKey[]
   icon: CATEGORY_ICONS[key],
 }));
 
-/* ---------- types ---------- */
-type VideoCardData = { id: string; title: string; thumbUrl?: string };
-type RecentData = {
+/* ---------- home feed types ---------- */
+type HomeRecipeItem = {
   id: string;
+  videoId: string;
+  url: string;
   title: string;
   channelName: string;
-  channelAvatarUrl?: string;
-  timeAgo: string;
-  likes: string;
-  comments: string;
-  shares: string;
-  price: string;
   thumbUrl?: string;
+  category?: string;
+  totalEstimatedPrice?: string;
+  likeCount?: string;
+  commentCount?: string;
+  shareCount?: string;
+  recipeData?: any;
 };
 
-/* ---------- dummy data ---------- */
-const myRecipes: VideoCardData[] = [
-  { id: '1', title: '일식 대파 듬뿍! 삼겹살로 만든 “대파 제육볶음”' },
-  { id: '2', title: 'Vlog, 파스타러버의 파스타만들기…🍝' },
+type SeedRecipe = {
+  id: string;
+  url: string;
+};
+
+/* ---------- seed urls ----------
+   여기 URL들은 네가 원하는 실제 요리 영상으로 바꾸면 됨
+*/
+const MY_RECIPE_SEEDS: SeedRecipe[] = [
+  { id: 'my-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'my-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
 ];
 
-const recommend: VideoCardData[] = [
-  { id: '3', title: '소고기 구이 With 갈비양념' },
-  { id: '4', title: '유튜브에서 난리난 그 소스' },
+const RECOMMEND_SEEDS: SeedRecipe[] = [
+  { id: 'rec-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'rec-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
 ];
 
-const recent: RecentData[] = [
-  {
-    id: '5',
-    title: '6000원 된장찌개 팔아서 건물 세운 그 집',
-    channelName: '요리 똑딱이형',
-    timeAgo: '8분 전',
-    likes: '1.3만',
-    comments: '1.7천',
-    shares: '508',
-    price: '7800원',
-  },
-  {
-    id: '6',
-    title: '부대찌개 레시피 (라면사리 필수)',
-    channelName: '요리 똑딱이형',
-    timeAgo: '12분 전',
-    likes: '8.2천',
-    comments: '540',
-    shares: '120',
-    price: '9000원',
-  },
-  {
-    id: '7',
-    title: '김치볶음밥 (계란후라이 이렇게!)',
-    channelName: '요리 똑딱이형',
-    timeAgo: '1시간 전',
-    likes: '2.1만',
-    comments: '2.4천',
-    shares: '880',
-    price: '6500원',
-  },
-  {
-    id: '8',
-    title: '초간단 계란국 (5분 컷)',
-    channelName: '요리 똑딱이형',
-    timeAgo: '2시간 전',
-    likes: '6.4천',
-    comments: '210',
-    shares: '55',
-    price: '3000원',
-  },
-  {
-    id: '9',
-    title: '집에서 만드는 떡볶이 황금레시피',
-    channelName: '요리 똑딱이형',
-    timeAgo: '3시간 전',
-    likes: '1.1만',
-    comments: '980',
-    shares: '300',
-    price: '5500원',
-  },
+const RECENT_SEEDS: SeedRecipe[] = [
+  { id: 'recent-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'recent-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'recent-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'recent-4', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+  { id: 'recent-5', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
 ];
 
 /* ---------- (유지) two-col calc ---------- */
@@ -158,6 +121,21 @@ const H_LIST_GAP = s(10);
 const H_CARD_W = s(229);
 const H_THUMB_H = s(127);
 
+function getCurrentUserId() {
+  // TODO:
+  // 1) Firebase 로그인 붙어 있으면 uid 반환
+  // 2) 백엔드 auth/me 붙어 있으면 그 user_id 반환
+  // 지금은 임시값
+  return 'firebase_uid_123';
+}
+
+function formatWon(value: any) {
+  if (value === undefined || value === null || value === '') return '';
+  const num = Number(value);
+  if (Number.isNaN(num)) return `${value}원`;
+  return `${num.toLocaleString('ko-KR')}원`;
+}
+
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -177,6 +155,13 @@ export default function Home() {
 
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+
+  const [myRecipes, setMyRecipes] = useState<HomeRecipeItem[]>([]);
+  const [recommendRecipes, setRecommendRecipes] = useState<HomeRecipeItem[]>([]);
+  const [recentRecipes, setRecentRecipes] = useState<HomeRecipeItem[]>([]);
+
+  const [homeFeedLoading, setHomeFeedLoading] = useState(false);
+  const [homeFeedError, setHomeFeedError] = useState<string | null>(null);
 
   const oembedTimer = useRef<any>(null);
 
@@ -235,6 +220,97 @@ export default function Home() {
     if (oembedTimer.current) clearTimeout(oembedTimer.current);
   };
 
+  const goToRecipeDetail = (item: HomeRecipeItem) => {
+    router.push({
+      pathname: '/create-link',
+      params: {
+        link: item.url,
+        url: item.url,
+        video_id: item.videoId,
+        title: item.title,
+        channel_name: item.channelName,
+        thumbnail_url: item.thumbUrl || '',
+        recipe_data: JSON.stringify(item.recipeData ?? null),
+      },
+    });
+  };
+
+  const analyzeSeedRecipe = async (seed: SeedRecipe): Promise<HomeRecipeItem | null> => {
+    try {
+      const videoId = extractYouTubeVideoId(seed.url);
+      if (!videoId) return null;
+
+      const meta = await buildYoutubeMetaFromUrl(seed.url).catch(() => null);
+
+      const safeTitle = meta?.title?.trim() || '제목 없음';
+      const safeChannelName = meta?.channel_name?.trim() || '채널명 없음';
+
+      const requestBody = {
+        video_id: videoId,
+        original_url: `https://www.youtube.com/watch?v=${videoId}`,
+        sharer_nickname: '익명',
+        title: safeTitle,
+        channel_name: safeChannelName,
+      };
+
+      const first = await analyzeRecipe(requestBody);
+
+      const finalRes =
+        first.status === 'PROCESSING'
+          ? await waitRecipeCompleted(first.video_id, {
+            intervalMs: 1500,
+            timeoutMs: 180000,
+          })
+          : first;
+
+      if (finalRes.status !== 'COMPLETED' || !finalRes.data) return null;
+
+      return {
+        id: seed.id,
+        videoId: finalRes.video_id,
+        url: seed.url,
+        title: finalRes.title || safeTitle,
+        channelName: finalRes.channel_name || safeChannelName,
+        thumbUrl: finalRes.thumbnail_url || meta?.thumbnail_url || '',
+        category: finalRes.data?.data?.category ?? '',
+        totalEstimatedPrice: formatWon(finalRes.data?.data?.total_estimated_price),
+        likeCount: String(finalRes.data?.data?.like_count ?? '0'),
+        commentCount: String(finalRes.data?.data?.comment_count ?? '0'),
+        shareCount: String(finalRes.data?.data?.share_count ?? '0'),
+        recipeData: finalRes.data?.data ?? null,
+      };
+    } catch (e) {
+      console.log('[HOME analyzeSeedRecipe error]', seed.url, e);
+      return null;
+    }
+  };
+
+  const loadHomeFeed = async () => {
+    try {
+      setHomeFeedLoading(true);
+      setHomeFeedError(null);
+
+      const [myList, recommendList, recentList] = await Promise.all([
+        Promise.all(MY_RECIPE_SEEDS.map(analyzeSeedRecipe)),
+        Promise.all(RECOMMEND_SEEDS.map(analyzeSeedRecipe)),
+        Promise.all(RECENT_SEEDS.map(analyzeSeedRecipe)),
+      ]);
+
+      setMyRecipes(myList.filter(Boolean) as HomeRecipeItem[]);
+      setRecommendRecipes(recommendList.filter(Boolean) as HomeRecipeItem[]);
+      setRecentRecipes(recentList.filter(Boolean) as HomeRecipeItem[]);
+    } catch (e: any) {
+      console.log('[HOME loadHomeFeed error]', e);
+      setHomeFeedError('홈 데이터를 불러오지 못했어요.');
+    } finally {
+      setHomeFeedLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadHomeFeed();
+  }, []);
+
   const handleDone = async () => {
     const trimmed = link.trim();
 
@@ -255,14 +331,8 @@ export default function Home() {
         return;
       }
 
-      // oEmbed나 네 메타 정보가 있으면 활용, 없으면 기본값으로 보정
-      const safeTitle =
-        videoMeta?.title?.trim() ||
-        '제목 없음';
-
-      const safeChannelName =
-        videoMeta?.channelName?.trim() ||
-        '채널명 없음';
+      const safeTitle = videoMeta?.title?.trim() || '제목 없음';
+      const safeChannelName = videoMeta?.channelName?.trim() || '채널명 없음';
 
       const requestBody = {
         video_id: videoId,
@@ -285,6 +355,8 @@ export default function Home() {
             timeoutMs: 180000,
           })
           : first;
+      console.log('[CATEGORY RAW]', finalRes.data?.category);
+      console.log('[FULL ANALYSIS DATA]', finalRes.data);
 
       console.log('[ANALYZE FINAL RESPONSE]', finalRes);
 
@@ -292,16 +364,35 @@ export default function Home() {
         setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
         return;
       }
+      if (finalRes.status === 'COMPLETED') {
+        try {
+          const userId = getCurrentUserId();
+
+          await createUserHistory(userId, {
+            video_id: finalRes.video_id ?? videoId,
+            recipe_title: finalRes.title || safeTitle,
+            thumbnail_url: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
+            channel_name: finalRes.channel_name || safeChannelName,
+            total_estimated_price: finalRes.data?.total_estimated_price ?? null,
+            category: finalRes.data?.category ?? '',
+            recipe_data: finalRes.data ?? null,
+          });
+
+        } catch (historyError) {
+          console.log('[CREATE USER HISTORY ERROR]', historyError);
+        }
+      }
 
       router.push({
         pathname: '/create-link',
         params: {
           link: trimmed,
           url: trimmed,
-          video_id: finalRes.video_id,
+          video_id: finalRes.video_id ?? videoId,
           title: finalRes.title || safeTitle,
           channel_name: finalRes.channel_name || safeChannelName,
           thumbnail_url: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
+          recipe_data: JSON.stringify(finalRes.data ?? null),
         },
       });
 
@@ -313,7 +404,6 @@ export default function Home() {
       setAnalyzeLoading(false);
     }
   };
-
 
   return (
     <ScrollView
@@ -462,7 +552,10 @@ export default function Home() {
         )}
       />
 
-      <SectionHeader title="내 레시피" onPressRight={() => router.push('/mypage')} />
+      {homeFeedLoading && <Text style={styles.homeFeedHint}>홈 레시피 불러오는 중...</Text>}
+      {!!homeFeedError && <Text style={styles.oembedError}>{homeFeedError}</Text>}
+
+      <SectionHeader title="내 레시피" onPressRight={() => router.push('/my-recipes')} />
       <FlatList
         horizontal
         data={myRecipes}
@@ -473,14 +566,14 @@ export default function Home() {
         snapToInterval={H_CARD_W + H_LIST_GAP}
         decelerationRate="fast"
         renderItem={({ item }) => (
-          <HorizontalVideoCard data={item} onPress={() => router.push(`/recipe/${item.id}`)} />
+          <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
         )}
       />
 
       <SectionHeader title="Recipick! 추천 레시피" onPressRight={() => router.push('/category/추천')} />
       <FlatList
         horizontal
-        data={recommend}
+        data={recommendRecipes}
         keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingLeft: H_LIST_LEFT, paddingRight: s(18) }}
@@ -488,24 +581,24 @@ export default function Home() {
         snapToInterval={H_CARD_W + H_LIST_GAP}
         decelerationRate="fast"
         renderItem={({ item }) => (
-          <HorizontalVideoCard data={item} onPress={() => router.push(`/recipe/${item.id}`)} />
+          <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
         )}
       />
 
       <Text style={styles.recentHeader}>최근 많이 사용한 레시피</Text>
 
       <View style={styles.recentBox}>
-        {recent.map((r, idx) => (
+        {recentRecipes.map((r, idx) => (
           <TouchableOpacity
             key={r.id}
             activeOpacity={0.92}
             style={[styles.recentCard, idx > 0 && { marginTop: s(12) }]}
-            onPress={() => router.push(`/recipe/${r.id}`)}
+            onPress={() => goToRecipeDetail(r)}
           >
             <View style={styles.recentInner}>
               <View style={styles.recentLeft}>
                 <Thumb style={styles.recentThumb} uri={r.thumbUrl} borderRadius={s(13.5)} />
-                <Text style={styles.timeAgoLeft}>{r.timeAgo}</Text>
+                <Text style={styles.timeAgoLeft}>Recipick 분석 완료</Text>
               </View>
 
               <View style={styles.recentRight}>
@@ -513,18 +606,18 @@ export default function Home() {
                   {r.title}
                 </Text>
 
-                <View style={styles.channelRow}>
-                  <Thumb style={styles.channelAvatar} uri={r.channelAvatarUrl} borderRadius={999} />
+                <View style={styles.channelRow2}>
+                  <Thumb style={styles.channelAvatar} uri={undefined} borderRadius={999} />
                   <Text style={styles.channelName} numberOfLines={1}>
                     {r.channelName}
                   </Text>
                 </View>
 
                 <View style={styles.metaRow}>
-                  <Meta icon="heart-outline" text={r.likes} />
-                  <Meta icon="chatbubble-outline" text={r.comments} />
-                  <Meta icon="share-social-outline" text={r.shares} />
-                  <Text style={styles.priceText}>{r.price}</Text>
+                  <Meta icon="heart-outline" text={r.likeCount || '0'} />
+                  <Meta icon="chatbubble-outline" text={r.commentCount || '0'} />
+                  <Meta icon="share-social-outline" text={r.shareCount || '0'} />
+                  <Text style={styles.priceText}>{r.totalEstimatedPrice || ''}</Text>
                 </View>
 
                 <Text style={styles.userTag}>Recipick 유저</Text>
@@ -554,22 +647,11 @@ function SectionHeader({ title, onPressRight }: { title: string; onPressRight?: 
   );
 }
 
-function HorizontalVideoCard({ data, onPress }: { data: VideoCardData; onPress: () => void }) {
+function HorizontalVideoCard({ data, onPress }: { data: HomeRecipeItem; onPress: () => void }) {
   return (
     <TouchableOpacity activeOpacity={0.92} style={styles.hVideoCard} onPress={onPress}>
       <Thumb style={styles.hThumb} uri={data.thumbUrl} borderRadius={s(14)} />
       <Text style={styles.hTitle} numberOfLines={2}>
-        {data.title}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
-function VideoCard({ data, onPress }: { data: VideoCardData; onPress: () => void }) {
-  return (
-    <TouchableOpacity activeOpacity={0.92} style={styles.videoCard} onPress={onPress}>
-      <Thumb style={styles.ytThumb} uri={data.thumbUrl} borderRadius={s(14)} />
-      <Text style={styles.videoTitle} numberOfLines={2}>
         {data.title}
       </Text>
     </TouchableOpacity>
@@ -684,6 +766,14 @@ const styles = StyleSheet.create({
   oembedHint: {
     marginTop: s(10),
     paddingHorizontal: s(6),
+    fontSize: s(12),
+    fontWeight: '800',
+    color: SECTION,
+    opacity: 0.8,
+  },
+  homeFeedHint: {
+    marginTop: s(10),
+    marginLeft: s(28),
     fontSize: s(12),
     fontWeight: '800',
     color: SECTION,
@@ -838,30 +928,6 @@ const styles = StyleSheet.create({
     lineHeight: s(16),
   },
 
-  twoCol: {
-    flexDirection: 'row',
-    gap: s(10),
-    paddingLeft: s(18),
-    paddingRight: s(18),
-  },
-  videoCard: {
-    width: TWO_COL_CARD_W,
-    backgroundColor: 'transparent',
-    paddingHorizontal: s(2),
-  },
-  ytThumb: {
-    width: '100%',
-    height: YT_THUMB_H,
-  },
-  videoTitle: {
-    marginTop: s(10),
-    marginLeft: s(3),
-    fontSize: s(12),
-    fontWeight: '800',
-    color: SECTION,
-    lineHeight: s(16),
-  },
-
   recentHeader: {
     marginTop: s(22),
     marginBottom: s(12),
@@ -922,7 +988,7 @@ const styles = StyleSheet.create({
     minHeight: s(36),
   },
 
-  channelRow: {
+  channelRow2: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: s(8),

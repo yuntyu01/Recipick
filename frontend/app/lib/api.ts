@@ -180,3 +180,47 @@ export async function waitRecipeCompleted(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }
+
+export type UserHistoryCreateRequest = {
+  video_id: string;
+  recipe_title: string;
+  thumbnail_url?: string;
+  channel_name?: string;
+};
+
+export type UserHistoryItem = {
+  video_id: string;
+  recipe_title?: string;
+  title?: string;
+  thumbnail_url?: string;
+  channel_name?: string;
+  category?: string;
+  total_estimated_price?: number | string;
+  created_at?: string;
+};
+
+export type UserHistoryResponse = {
+  items?: UserHistoryItem[];
+} | UserHistoryItem[];
+
+export async function createUserHistory(
+  userId: string,
+  body: UserHistoryCreateRequest
+) {
+  return request(`/api/users/${encodeURIComponent(userId)}/history`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getUserHistory(
+  userId: string,
+  limit = 20
+): Promise<UserHistoryResponse> {
+  return request<UserHistoryResponse>(
+    `/api/users/${encodeURIComponent(userId)}/history?limit=${limit}`,
+    {
+      method: 'GET',
+    }
+  );
+}

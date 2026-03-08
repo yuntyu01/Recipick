@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Dimensions,
+    Image,
     ScrollView,
     StyleSheet,
     Text,
@@ -10,6 +11,8 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { analyzeRecipe, waitRecipeCompleted } from '../lib/api';
+import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from '../lib/youtube';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -24,69 +27,168 @@ const BG = '#F3F6F6';
 const CARD = '#FFFFFF';
 const THUMB_BG = '#DDE6E6';
 
-type RecentData = {
+type CategoryRecipeItem = {
     id: string;
+    videoId: string;
+    url: string;
     title: string;
     channelName: string;
-    timeAgo: string;
-    likes: string;
-    comments: string;
-    shares: string;
-    price: string;
+    thumbUrl?: string;
+    likeCount?: string;
+    commentCount?: string;
+    shareCount?: string;
+    totalEstimatedPrice?: string;
+    recipeData?: any;
 };
 
-const dummy: RecentData[] = [
-    {
-        id: '5',
-        title: '6000원 된장찌개 팔아서 건물 세운 그 집',
-        channelName: '요리 똑딱이형',
-        likes: '1.3만',
-        comments: '1.7천',
-        shares: '508',
-        price: '7800원',
-    },
-    {
-        id: '6',
-        title: '부대찌개 레시피 (라면사리 필수)',
-        channelName: '요리 똑딱이형',
-        likes: '8.2천',
-        comments: '540',
-        shares: '120',
-        price: '9000원',
-    },
-    {
-        id: '7',
-        title: '김치볶음밥 (계란후라이 이렇게!)',
-        channelName: '요리 똑딱이형',
-        likes: '2.1만',
-        comments: '2.4천',
-        shares: '880',
-        price: '6500원',
-    },
-    {
-        id: '8',
-        title: '초간단 계란국 (5분 컷)',
-        channelName: '요리 똑딱이형',
-        likes: '6.4천',
-        comments: '210',
-        shares: '55',
-        price: '3000원',
-    },
-    {
-        id: '9',
-        title: '집에서 만드는 떡볶이 황금레시피',
-        channelName: '요리 똑딱이형',
-        likes: '1.1만',
-        comments: '980',
-        shares: '300',
-        price: '5500원',
-    },
-];
+type SeedRecipe = {
+    id: string;
+    url: string;
+};
+
+/* 
+  여기 seed URL은 카테고리별 실제 유튜브 링크로 바꿔주면 됨
+  지금은 구조 연결용 예시
+*/
+const CATEGORY_SEEDS: Record<string, SeedRecipe[]> = {
+    한식: [
+        { id: 'k-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'k-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'k-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'k-4', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'k-5', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+    중식: [
+        { id: 'c-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'c-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'c-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+    일식: [
+        { id: 'j-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'j-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'j-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+    양식: [
+        { id: 'w-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'w-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'w-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+    분식: [
+        { id: 's-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 's-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 's-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+    디저트: [
+        { id: 'd-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'd-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+        { id: 'd-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
+    ],
+};
+
+function formatWon(value: any) {
+    if (value === undefined || value === null || value === '') return '';
+    const num = Number(value);
+    if (Number.isNaN(num)) return `${value}원`;
+    return `${num.toLocaleString('ko-KR')}원`;
+}
 
 export default function CategoryPage() {
     const { name } = useLocalSearchParams();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+
+    const categoryName = String(name ?? '');
+
+    const [items, setItems] = useState<CategoryRecipeItem[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const seeds = useMemo(() => {
+        return CATEGORY_SEEDS[categoryName] ?? [];
+    }, [categoryName]);
+
+    const analyzeSeedRecipe = async (seed: SeedRecipe): Promise<CategoryRecipeItem | null> => {
+        try {
+            const videoId = extractYouTubeVideoId(seed.url);
+            if (!videoId) return null;
+
+            const meta = await buildYoutubeMetaFromUrl(seed.url).catch(() => null);
+
+            const safeTitle = meta?.title?.trim() || '제목 없음';
+            const safeChannelName = meta?.channel_name?.trim() || '채널명 없음';
+
+            const requestBody = {
+                video_id: videoId,
+                original_url: `https://www.youtube.com/watch?v=${videoId}`,
+                sharer_nickname: '익명',
+                title: safeTitle,
+                channel_name: safeChannelName,
+            };
+
+            const first = await analyzeRecipe(requestBody);
+
+            const finalRes =
+                first.status === 'PROCESSING'
+                    ? await waitRecipeCompleted(first.video_id, {
+                        intervalMs: 1500,
+                        timeoutMs: 180000,
+                    })
+                    : first;
+
+            if (finalRes.status !== 'COMPLETED' || !finalRes.data) return null;
+
+            return {
+                id: seed.id,
+                videoId: finalRes.video_id,
+                url: seed.url,
+                title: finalRes.title || safeTitle,
+                channelName: finalRes.channel_name || safeChannelName,
+                thumbUrl: finalRes.thumbnail_url || meta?.thumbnail_url || '',
+                likeCount: String(finalRes.data.like_count ?? '0'),
+                commentCount: String(finalRes.data.comment_count ?? '0'),
+                shareCount: String(finalRes.data.share_count ?? '0'),
+                totalEstimatedPrice: formatWon(finalRes.data.total_estimated_price),
+                recipeData: finalRes.data,
+            };
+        } catch (e) {
+            console.log('[CATEGORY analyzeSeedRecipe error]', seed.url, e);
+            return null;
+        }
+    };
+
+    const loadCategoryFeed = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const results = await Promise.all(seeds.map(analyzeSeedRecipe));
+            setItems(results.filter(Boolean) as CategoryRecipeItem[]);
+        } catch (e) {
+            console.log('[CATEGORY loadCategoryFeed error]', e);
+            setError('카테고리 레시피를 불러오지 못했어요.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadCategoryFeed();
+    }, [categoryName]);
+
+    const goToRecipeDetail = (item: CategoryRecipeItem) => {
+        router.push({
+            pathname: '/create-link',
+            params: {
+                link: item.url,
+                url: item.url,
+                video_id: item.videoId,
+                title: item.title,
+                channel_name: item.channelName,
+                thumbnail_url: item.thumbUrl || '',
+                recipe_data: JSON.stringify(item.recipeData ?? null),
+            },
+        });
+    };
 
     return (
         <ScrollView
@@ -94,32 +196,34 @@ export default function CategoryPage() {
             contentContainerStyle={{ paddingTop: insets.top }}
             showsVerticalScrollIndicator={false}
         >
-            {/* ===== Header (가운데 정렬) ===== */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.replace('/home')} style={styles.backBtn}
+                <TouchableOpacity
+                    onPress={() => router.replace('/home')}
+                    style={styles.backBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                     <Ionicons name="arrow-back" size={22} color={TITLE} />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle}>{String(name ?? '')}</Text>
+                <Text style={styles.headerTitle}>{categoryName}</Text>
             </View>
 
-            {/* ===== List (홈 recent 카드와 동일) ===== */}
+            {loading && <Text style={styles.infoText}>카테고리 레시피 불러오는 중...</Text>}
+            {!!error && <Text style={styles.errorText}>{error}</Text>}
+
             <View style={styles.recentBox}>
-                {dummy.map((r, idx) => (
+                {items.map((r, idx) => (
                     <TouchableOpacity
                         key={r.id}
                         activeOpacity={0.92}
                         style={[styles.recentCard, idx > 0 && { marginTop: s(10) }]}
+                        onPress={() => goToRecipeDetail(r)}
                     >
                         <View style={styles.recentInner}>
-                            {/* 왼쪽: 썸네일*/}
                             <View style={styles.recentLeft}>
-                                <Thumb style={styles.recentThumb} borderRadius={s(13.5)} />
+                                <Thumb style={styles.recentThumb} borderRadius={s(13.5)} uri={r.thumbUrl} />
                             </View>
 
-                            {/* 오른쪽 정보 */}
                             <View style={styles.recentRight}>
                                 <Text style={styles.recentTitle} numberOfLines={2}>
                                     {r.title}
@@ -134,20 +238,25 @@ export default function CategoryPage() {
 
                                 <View style={styles.metaRow}>
                                     <View style={styles.metaLeft}>
-                                        <Meta icon="heart-outline" text={r.likes} />
-                                        <Meta icon="chatbubble-outline" text={r.comments} />
-                                        <Meta icon="share-social-outline" text={r.shares} />
+                                        <Meta icon="heart-outline" text={r.likeCount || '0'} />
+                                        <Meta icon="chatbubble-outline" text={r.commentCount || '0'} />
+                                        <Meta icon="share-social-outline" text={r.shareCount || '0'} />
                                     </View>
 
                                     <Text style={styles.priceText} numberOfLines={1}>
-                                        {r.price}
+                                        {r.totalEstimatedPrice || ''}
                                     </Text>
                                 </View>
-
                             </View>
                         </View>
                     </TouchableOpacity>
                 ))}
+
+                {!loading && items.length === 0 && !error && (
+                    <View style={styles.emptyBox}>
+                        <Text style={styles.emptyText}>표시할 레시피가 아직 없어요.</Text>
+                    </View>
+                )}
             </View>
 
             <View style={{ height: s(40) }} />
@@ -169,10 +278,15 @@ function Meta({ icon, text }: { icon: any; text: string }) {
 function Thumb({
     style,
     borderRadius,
+    uri,
 }: {
     style: any;
     borderRadius: number;
+    uri?: string;
 }) {
+    if (uri) {
+        return <Image source={{ uri }} style={[style, { borderRadius }]} resizeMode="cover" />;
+    }
     return <View style={[style, { borderRadius, backgroundColor: THUMB_BG }]} />;
 }
 
@@ -181,7 +295,6 @@ function Thumb({
 const styles = StyleSheet.create({
     screen: { flex: 1, backgroundColor: BG },
 
-    /* header */
     header: {
         height: s(56),
         justifyContent: 'center',
@@ -199,20 +312,33 @@ const styles = StyleSheet.create({
         pointerEvents: 'none',
     },
     backBtn: {
-        width: 44,       
+        width: 44,
         height: 44,
         justifyContent: 'center',
-        alignItems: 'flex-start',  // 왼쪽 정렬 유지
+        alignItems: 'flex-start',
     },
 
+    infoText: {
+        marginBottom: s(10),
+        marginLeft: s(18),
+        fontSize: s(12),
+        fontWeight: '800',
+        color: SECTION,
+        opacity: 0.8,
+    },
+    errorText: {
+        marginBottom: s(10),
+        marginLeft: s(18),
+        fontSize: s(12),
+        fontWeight: '900',
+        color: '#D14B4B',
+    },
 
-    /* list wrapper */
     recentBox: {
         paddingLeft: s(18),
         paddingRight: s(18),
     },
 
-    /* card */
     recentCard: {
         backgroundColor: CARD,
         borderRadius: s(18),
@@ -226,7 +352,6 @@ const styles = StyleSheet.create({
         paddingBottom: s(14),
     },
 
-    /* left */
     recentLeft: {
         width: '38%',
     },
@@ -234,16 +359,7 @@ const styles = StyleSheet.create({
         width: '100%',
         aspectRatio: 1.4,
     },
-    timeAgoLeft: {
-        marginTop: s(6),
-        paddingLeft: s(8),
-        fontSize: s(11),
-        fontWeight: '700',
-        color: SECTION,
-        opacity: 0.75,
-    },
 
-    /* right */
     recentRight: {
         flex: 1,
         justifyContent: 'space-between',
@@ -254,7 +370,7 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: TITLE,
         lineHeight: s(18),
-        minHeight: s(36), // ✅ 제목 1줄이어도 2줄 높이 확보
+        minHeight: s(36),
     },
 
     channelRow: {
@@ -295,11 +411,18 @@ const styles = StyleSheet.create({
         flexShrink: 0,
     },
 
-    userTag: {
-        fontSize: s(11),
-        fontWeight: '600',
-        color: SECTION,
-        opacity: 0.6,
-        alignSelf: 'flex-end',
+    emptyBox: {
+        backgroundColor: CARD,
+        borderRadius: s(18),
+        paddingHorizontal: s(16),
+        paddingVertical: s(20),
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        fontSize: s(14),
+        fontWeight: '700',
+        color: '#8A9B9A',
+        textAlign: 'center',
     },
 });

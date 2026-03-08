@@ -1,16 +1,18 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
     Dimensions,
+    Linking,
+    Modal,
+    PanResponder,
     Platform,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     TouchableOpacity,
-    View,
-    PanResponder,
-    Modal,
     Vibration,
+    View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,11 +34,12 @@ type Step = {
     title: string;
     body: string;
     startSec: number;
+    timerSec?: number;
 };
 
 function firstString(v: string | string[] | undefined) {
     if (!v) return '';
-    return Array.isArray(v) ? v[0] ?? '' : v;
+    return Array.isArray(v) ? (v[0] ?? '') : v;
 }
 
 function pad2(n: number) {
@@ -50,6 +53,28 @@ function formatMMSS(sec: number) {
     return `${pad2(m)}:${pad2(s)}`;
 }
 
+function timestampToSec(ts?: string) {
+    if (!ts) return 0;
+
+    const parts = String(ts)
+        .split(':')
+        .map((v) => Number(v));
+
+    if (parts.some((v) => Number.isNaN(v))) return 0;
+
+    if (parts.length === 2) {
+        const [m, s] = parts;
+        return m * 60 + s;
+    }
+
+    if (parts.length === 3) {
+        const [h, m, s] = parts;
+        return h * 3600 + m * 60 + s;
+    }
+
+    return 0;
+}
+
 export default function CookScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -57,37 +82,29 @@ export default function CookScreen() {
 
     const videoId = firstString(params.video_id);
     const url = firstString(params.url) || firstString(params.link);
+    const recipeDataParam = firstString(params.recipe_data);
 
-    const steps: Step[] = useMemo(
-        () => [
-            {
-                id: 's1',
-                title: 'STEP 1',
-                startSec: 0,
-                body:
-                    '대파는 송송 썰 필요 없이 길게 반을 갈라준 뒤, 5cm 정도 길이로 큼직하게 썰어 준비합니다. 이 요리는 파 맛으로 먹는 제육볶음이기 때문에, 대파는 넉넉하게 준비해 주세요.',
-            },
-            {
-                id: 's2',
-                title: 'STEP 2',
-                startSec: 55,
-                body: '청양고추는 매운맛을 살리기 위해 두껍게 어슷썰기로 큼직하게 썰어 준비합니다.',
-            },
-            {
-                id: 's3',
-                title: 'STEP 3',
-                startSec: 115,
-                body: '고기를 볶다가 양념을 넣고 센불로 빠르게 마무리합니다.',
-            },
-            {
-                id: 's4',
-                title: 'STEP 4',
-                startSec: 175,
-                body: '불을 줄여 한 번 더 볶아 양념이 잘 배도록 마무리합니다.',
-            },
-        ],
-        []
-    );
+    const recipeData = useMemo(() => {
+        try {
+            return recipeDataParam ? JSON.parse(recipeDataParam) : null;
+        } catch (e) {
+            console.log('[COOK] recipe_data parse error:', e);
+            return null;
+        }
+    }, [recipeDataParam]);
+
+
+    const steps: Step[] = useMemo(() => {
+        if (!recipeData?.steps || !Array.isArray(recipeData.steps)) return [];
+
+        return recipeData.steps.map((item: any, index: number) => ({
+            id: `s${item.step ?? index + 1}`,
+            title: `STEP ${item.step ?? index + 1}`,
+            body: item.desc ?? '',
+            startSec: timestampToSec(item.video_timestamp),
+            timerSec: Number(item.timer_sec ?? 0),
+        }));
+    }, [recipeData]);
 
     const [activeIdx, setActiveIdx] = useState(0);
     const webRef = useRef<WebView>(null);
@@ -104,6 +121,7 @@ export default function CookScreen() {
     const [timerSecInput, setTimerSecInput] = useState('');
 
     const [voiceStatusText, setVoiceStatusText] = useState('듣고 있는 중...');
+    const [videoError, setVideoError] = useState(false);
 
     const alarmSoundRef = useRef<Audio.Sound | null>(null);
     const timerFinishedHandledRef = useRef(false);
@@ -111,22 +129,40 @@ export default function CookScreen() {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
+    const [playerStartSec, setPlayerStartSec] = useState(0);
+
+    useEffect(() => {
+        console.log('[COOK PARAMS]', params);
+    }, [params]);
+
     const seekTo = (sec: number) => {
-        webRef.current?.postMessage(JSON.stringify({ type: 'SEEK', time: sec }));
+        setPlayerStartSec(Math.max(0, Math.floor(sec)));
     };
 
     const playVideo = () => {
-        webRef.current?.postMessage(JSON.stringify({ type: 'PLAY' }));
+        setIsPlaying(true);
     };
 
     const pauseVideo = () => {
-        webRef.current?.postMessage(JSON.stringify({ type: 'PAUSE' }));
+        setIsPlaying(false);
     };
 
     const jumpToStep = (idx: number) => {
+        if (steps.length === 0) return;
+
         const next = Math.max(0, Math.min(steps.length - 1, idx));
+        const targetStep = steps[next];
+
         setActiveIdx(next);
-        seekTo(steps[next].startSec);
+        seekTo(targetStep.startSec);
+
+        if ((targetStep.timerSec ?? 0) > 0) {
+            setManualTimerSec(targetStep.timerSec);
+            setRemainingSec(targetStep.timerSec);
+            timerFinishedHandledRef.current = false;
+            setAlarmOpen(false);
+            Vibration.cancel();
+        }
     };
 
     const stopAlarmSound = async () => {
@@ -187,6 +223,17 @@ export default function CookScreen() {
         setVoiceOpen(false);
     };
 
+    const openYoutubeExternally = async () => {
+        const targetUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : url;
+        if (!targetUrl) return;
+
+        try {
+            await Linking.openURL(targetUrl);
+        } catch (e) {
+            console.log('[OPEN YOUTUBE ERROR]', e);
+        }
+    };
+
     useEffect(() => {
         Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
@@ -222,20 +269,16 @@ export default function CookScreen() {
 
         const loop = Animated.loop(
             Animated.sequence([
-                Animated.parallel([
-                    Animated.timing(pulseAnim, {
-                        toValue: 1.12,
-                        duration: 700,
-                        useNativeDriver: true,
-                    }),
-                ]),
-                Animated.parallel([
-                    Animated.timing(pulseAnim, {
-                        toValue: 1,
-                        duration: 700,
-                        useNativeDriver: true,
-                    }),
-                ]),
+                Animated.timing(pulseAnim, {
+                    toValue: 1.12,
+                    duration: 700,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(pulseAnim, {
+                    toValue: 1,
+                    duration: 700,
+                    useNativeDriver: true,
+                }),
             ])
         );
 
@@ -276,7 +319,6 @@ export default function CookScreen() {
         if (!Number.isFinite(mins) || !Number.isFinite(secs)) return;
 
         const total = Math.max(0, mins * 60 + secs);
-
         if (total <= 0) return;
 
         setManualTimerSec(total);
@@ -335,7 +377,7 @@ export default function CookScreen() {
     }, [remainingSec, isPlaying, manualTimerSec]);
 
     const togglePlay = () => {
-        if (alarmOpen) return;
+        if (alarmOpen || videoError) return;
 
         setIsPlaying((prev) => {
             const next = !prev;
@@ -359,81 +401,23 @@ export default function CookScreen() {
                     if (g.dx >= threshold) jumpToStep(activeIdx + 1);
                 },
             }),
-        [activeIdx, steps.length]
+        [activeIdx, steps]
     );
 
-    const html = useMemo(() => {
-        const id = videoId || '';
-        const origin = 'https://localhost';
+    const embedUrl = useMemo(() => {
+        if (!videoId) return '';
 
-        return `
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-    <style>
-      html, body { margin:0; padding:0; background:#000; height:100%; }
-      #player { position:absolute; inset:0; }
-    </style>
-  </head>
-  <body>
-    <div id="player"></div>
+        const query = new URLSearchParams({
+            playsinline: '1',
+            rel: '0',
+            modestbranding: '1',
+            controls: '1',
+            autoplay: isPlaying ? '1' : '0',
+            start: String(playerStartSec),
+        });
 
-<script>
-  var tag = document.createElement('script');
-  tag.src = "https://www.youtube.com/iframe_api";
-  var firstScriptTag = document.getElementsByTagName('script')[0];
-  firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-  var player;
-
-  function onYouTubeIframeAPIReady() {
-    player = new YT.Player('player', {
-      width: '100%',
-      height: '100%',
-      videoId: '${id}',
-      playerVars: {
-        playsinline: 1,
-        controls: 1,
-        rel: 0,
-        modestbranding: 1,
-        origin: '${origin}'
-      }
-    });
-  }
-
-  function safeSeek(t) {
-    try {
-      if (!player) return;
-      player.seekTo(t, true);
-      player.playVideo();
-    } catch (e) {}
-  }
-
-  function safePlay() {
-    try { if (player) player.playVideo(); } catch (e) {}
-  }
-
-  function safePause() {
-    try { if (player) player.pauseVideo(); } catch (e) {}
-  }
-
-  function onMsg(data) {
-    try {
-      var msg = JSON.parse(data);
-      if (msg.type === 'SEEK') safeSeek(Number(msg.time || 0));
-      if (msg.type === 'PAUSE') safePause();
-      if (msg.type === 'PLAY') safePlay();
-    } catch (e) {}
-  }
-
-  document.addEventListener("message", function(event) { onMsg(event.data); });
-  window.addEventListener("message", function(event) { onMsg(event.data); });
-</script>
-  </body>
-</html>
-`;
-    }, [videoId]);
+        return `https://www.youtube.com/embed/${videoId}?${query.toString()}`;
+    }, [videoId, playerStartSec, isPlaying]);
 
     const VIDEO_W = SCREEN_W;
     const VIDEO_H = Math.round((VIDEO_W * 9) / 16);
@@ -464,16 +448,57 @@ export default function CookScreen() {
             >
                 <View style={[styles.videoWrap, { width: VIDEO_W, height: VIDEO_H }]}>
                     {videoId ? (
-                        <WebView
-                            ref={webRef}
-                            source={{ html }}
-                            style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
-                            javaScriptEnabled
-                            domStorageEnabled
-                            allowsInlineMediaPlayback
-                            mediaPlaybackRequiresUserAction={false}
-                            allowsFullscreenVideo
-                        />
+                        <>
+                            <WebView
+                                ref={webRef}
+                                key={`${videoId}-${playerStartSec}-${isPlaying ? 'play' : 'pause'}`}
+                                source={{
+                                    uri: embedUrl,
+                                    headers: {
+                                        Referer: 'https://www.youtube.com/',
+                                    },
+                                }}
+                                originWhitelist={['*']}
+                                style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
+                                javaScriptEnabled
+                                domStorageEnabled
+                                allowsInlineMediaPlayback
+                                mediaPlaybackRequiresUserAction={false}
+                                allowsFullscreenVideo
+                                mixedContentMode="always"
+                                thirdPartyCookiesEnabled
+                                sharedCookiesEnabled
+                                setSupportMultipleWindows={false}
+                                onLoadEnd={() => {
+                                    setVideoError(false);
+                                }}
+                                onError={(syntheticEvent) => {
+                                    console.log('[WEBVIEW ERROR]', syntheticEvent.nativeEvent);
+                                    setVideoError(true);
+                                }}
+                                onHttpError={(syntheticEvent) => {
+                                    console.log('[WEBVIEW HTTP ERROR]', syntheticEvent.nativeEvent);
+                                    setVideoError(true);
+                                }}
+                            />
+
+                            {videoError && (
+                                <View style={styles.videoErrorOverlay}>
+                                    <Text style={styles.videoErrorTitle}>앱 안에서 영상 재생이 막혔어요</Text>
+                                    <Text style={styles.videoErrorSub}>
+                                        유튜브 정책 때문에 WebView 재생이 제한될 수 있어요.
+                                    </Text>
+
+                                    <TouchableOpacity
+                                        style={styles.videoErrorBtn}
+                                        onPress={openYoutubeExternally}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.videoErrorBtnText}>유튜브에서 열기</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </>
                     ) : (
                         <View style={styles.videoFallback}>
                             <Text style={{ color: MUTED, fontWeight: '800' }}>
@@ -488,19 +513,25 @@ export default function CookScreen() {
                     )}
                 </View>
 
+        
+
                 <View style={styles.progressWrap}>
                     <View style={styles.progressRow}>
-                        {steps.map((_, i) => {
-                            const active = i === activeIdx;
-                            return (
-                                <TouchableOpacity
-                                    key={steps[i].id}
-                                    activeOpacity={0.85}
-                                    onPress={() => jumpToStep(i)}
-                                    style={[styles.progressSeg, active && styles.progressSegActive]}
-                                />
-                            );
-                        })}
+                        {steps.length > 0 ? (
+                            steps.map((_, i) => {
+                                const active = i === activeIdx;
+                                return (
+                                    <TouchableOpacity
+                                        key={steps[i].id}
+                                        activeOpacity={0.85}
+                                        onPress={() => jumpToStep(i)}
+                                        style={[styles.progressSeg, active && styles.progressSegActive]}
+                                    />
+                                );
+                            })
+                        ) : (
+                            <View style={styles.progressSeg} />
+                        )}
                     </View>
                 </View>
 
@@ -513,27 +544,36 @@ export default function CookScreen() {
                 </View>
 
                 <View style={styles.stepsArea} {...panResponder.panHandlers}>
-                    {steps.map((s, idx) => {
-                        const active = idx === activeIdx;
-                        const mt = idx === 0 ? 0 : 22;
+                    {steps.length > 0 ? (
+                        steps.map((s, idx) => {
+                            const active = idx === activeIdx;
+                            const mt = idx === 0 ? 0 : 22;
 
-                        return (
-                            <TouchableOpacity
-                                key={s.id}
-                                activeOpacity={0.92}
-                                onPress={() => jumpToStep(idx)}
-                                style={{ marginTop: mt }}
-                            >
-                                <View style={[styles.stepCard, active && styles.stepCardActive]}>
-                                    <View style={styles.stepTopRow}>
-                                        <Text style={[styles.stepTitle, active && { color: BRAND }]}>{s.title}</Text>
+                            return (
+                                <TouchableOpacity
+                                    key={s.id}
+                                    activeOpacity={0.92}
+                                    onPress={() => jumpToStep(idx)}
+                                    style={{ marginTop: mt }}
+                                >
+                                    <View style={[styles.stepCard, active && styles.stepCardActive]}>
+                                        <View style={styles.stepTopRow}>
+                                            <Text style={[styles.stepTitle, active && { color: BRAND }]}>{s.title}</Text>
+                                            {(s.timerSec ?? 0) > 0 && (
+                                                <Text style={styles.stepTimerBadge}>{formatMMSS(s.timerSec ?? 0)}</Text>
+                                            )}
+                                        </View>
+
+                                        <Text style={styles.stepBody}>{s.body}</Text>
                                     </View>
-
-                                    <Text style={styles.stepBody}>{s.body}</Text>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    })}
+                                </TouchableOpacity>
+                            );
+                        })
+                    ) : (
+                        <View style={styles.emptyWrap}>
+                            <Text style={styles.emptyText}>레시피 분석 결과가 아직 없어요.</Text>
+                        </View>
+                    )}
                 </View>
             </ScrollView>
 
@@ -687,8 +727,6 @@ function AnimatedTextInput({
     style: any;
     maxLength: number;
 }) {
-    const { TextInput } = require('react-native');
-
     return (
         <TextInput
             value={value}
@@ -744,13 +782,51 @@ const styles = StyleSheet.create({
     },
     timerPillText: { fontWeight: '900', color: TEXT, fontSize: 12 },
 
-    videoWrap: { backgroundColor: '#000' },
+    videoWrap: {
+        backgroundColor: '#000',
+        position: 'relative',
+    },
     videoFallback: {
         flex: 1,
         backgroundColor: '#DDE6E6',
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 16,
+    },
+    videoErrorOverlay: {
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        bottom: 16,
+        borderRadius: 16,
+        backgroundColor: 'rgba(20, 20, 20, 0.82)',
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+    },
+    videoErrorTitle: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '900',
+    },
+    videoErrorSub: {
+        marginTop: 6,
+        color: '#E5E7EB',
+        fontSize: 12,
+        fontWeight: '700',
+        lineHeight: 18,
+    },
+    videoErrorBtn: {
+        marginTop: 12,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: BRAND,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    videoErrorBtnText: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '900',
     },
 
     progressWrap: {
@@ -808,12 +884,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: 10,
     },
     stepTitle: {
         fontSize: 20,
         fontWeight: '900',
         color: TEXT,
         marginBottom: 10,
+        flex: 1,
     },
     stepBody: {
         fontSize: 15,
@@ -821,6 +899,32 @@ const styles = StyleSheet.create({
         color: TEXT,
         lineHeight: 22,
         opacity: 0.92,
+    },
+    stepTimerBadge: {
+        fontSize: 12,
+        fontWeight: '900',
+        color: BRAND,
+        backgroundColor: '#E9F6F1',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+    },
+
+    emptyWrap: {
+        marginHorizontal: 18,
+        backgroundColor: WHITE,
+        borderRadius: 18,
+        paddingHorizontal: 18,
+        paddingVertical: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: MUTED,
+        textAlign: 'center',
     },
 
     bottomBar: {
