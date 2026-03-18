@@ -12,6 +12,7 @@ def test_firebase_signup(client, monkeypatch):
                 "nickname": nickname or "tester",
                 "profile_image": profile_image,
                 "created_at": "2026-02-26T00:00:00Z",
+                "is_anonymous": False,
             },
         }
 
@@ -39,6 +40,7 @@ def test_firebase_login(client, monkeypatch):
                 "nickname": "tester",
                 "profile_image": None,
                 "created_at": "2026-02-26T00:00:00Z",
+                "is_anonymous": False,
             },
         }
 
@@ -66,6 +68,7 @@ def test_auth_me_success(client, monkeypatch):
             "nickname": "tester",
             "profile_image": None,
             "created_at": "2026-02-26T00:00:00Z",
+            "is_anonymous": False,
         }
 
     monkeypatch.setattr(auth_router.auth_service, "me_from_firebase_token", fake_me_from_firebase_token)

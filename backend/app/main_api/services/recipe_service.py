@@ -10,7 +10,7 @@ from app.shared.models.recipe_model import RecipeStatus
 sqs = boto3.client('sqs', region_name=settings.REGION)
 SUPPORTED_RECIPE_CATEGORIES = {"한식", "중식", "일식", "양식", "분식", "디저트"}
 
-# Boto3가 숫자 데이터를 가져올 때 Decimal 객체로 가져와서 FastAPI가 500 에러를 뱉는 걸 막음
+# Boto3 Decimal JSON 변환
 def replace_decimals(obj):
     if isinstance(obj, list):
         return [replace_decimals(i) for i in obj]
@@ -20,6 +20,7 @@ def replace_decimals(obj):
         return int(obj) if obj % 1 == 0 else float(obj)
     return obj
 
+# 레시피 요청 처리(캐시 확인/초기 저장/SQS 위임)
 def process_recipe_request(video_id: str, original_url: str, sharer_nickname: str, title: str, channel_name: str):
     # 1) 캐시 확인: 완료된 레시피면 즉시 반환
     existing = recipe_repo.get_recipe(video_id)
@@ -51,10 +52,8 @@ def process_recipe_request(video_id: str, original_url: str, sharer_nickname: st
         "channel_name": channel_name
     }
 
+# 프론트 폴링용 레시피 상태/데이터 조회
 def get_recipe_info(video_id: str):
-    """
-    프론트엔드 폴링용: 특정 비디오의 현재 상태와 분석 데이터를 반환
-    """
     # 1. DB에서 영상 정보(PK: VIDEO#id, SK: INFO)를 가져옴
     item = recipe_repo.get_recipe(video_id)
     
@@ -63,18 +62,34 @@ def get_recipe_info(video_id: str):
     return replace_decimals(item)
 
 
+# 댓글 생성(익명 처리 포함)
 def create_comment(
     video_id: str,
     content: str,
     like_count: int = 0,
     user_id: Optional[str] = None,
     nickname: Optional[str] = None,
+    is_anonymous: bool = False,
 ):
-    # 비로그인 댓글은 영상 단위 익명 시퀀스로 닉네임 생성
-    if not user_id or not nickname:
-        anonymous_number = recipe_repo.count_anonymous_comments(video_id) + 1
-        user_id = f"ANON#{anonymous_number}"
+    # 익명 댓글은 영상 단위 원자 카운터로 번호 부여
+    if is_anonymous:
+        anonymous_number = recipe_repo.get_or_create_anonymous_number(video_id, user_id)
         nickname = f"익명{anonymous_number}"
+        stored_user_id = user_id or f"ANON#{anonymous_number}"
+        return replace_decimals(
+            recipe_repo.create_comment(
+                video_id=video_id,
+                user_id=stored_user_id,
+                nickname=nickname,
+                content=content,
+                like_count=like_count,
+                is_anonymous=True,
+                anonymous_number=anonymous_number,
+            )
+        )
+
+    if not user_id or not nickname:
+        raise HTTPException(status_code=400, detail="로그인 사용자 정보가 필요합니다.")
 
     return replace_decimals(
         recipe_repo.create_comment(
@@ -82,17 +97,20 @@ def create_comment(
             user_id=user_id,
             nickname=nickname,
             content=content,
-            like_count=like_count
+            like_count=like_count,
+            is_anonymous=False,
         )
     )
 
 
+# 레시피 댓글 목록 최신순 조회
 def list_comments(video_id: str, limit: int = 20):
     return replace_decimals(recipe_repo.list_comments(video_id=video_id, limit=limit))
 
 
+# 댓글 수정 검증/정규화
 def update_comment(video_id: str, comment_id: str, user_id: str, content: str):
-    # 저장소 계층에서 본인 여부/존재 여부를 판별하고 상태코드로 반환한다.
+    # 저장소 계층 본인/존재 여부 판별 및 상태코드 반환
     result = recipe_repo.update_comment(
         video_id=video_id,
         comment_id=comment_id,
@@ -111,6 +129,8 @@ def update_comment(video_id: str, comment_id: str, user_id: str, content: str):
             "video_id": video_id,
             "user_id": item.get("user_id"),
             "nickname": item.get("nickname"),
+            "is_anonymous": item.get("is_anonymous", False),
+            "anonymous_number": item.get("anonymous_number"),
             "content": item.get("content"),
             "like_count": item.get("like_count", 0),
             "created_at": item.get("created_at"),
@@ -118,8 +138,9 @@ def update_comment(video_id: str, comment_id: str, user_id: str, content: str):
     )
 
 
+# 댓글 삭제 검증/응답 생성
 def delete_comment(video_id: str, comment_id: str, user_id: str):
-    # 저장소 계층에서 본인 여부/존재 여부를 판별하고 상태코드로 반환한다.
+    # 저장소 계층 본인/존재 여부 판별 및 상태코드 반환
     result = recipe_repo.delete_comment(
         video_id=video_id,
         comment_id=comment_id,
@@ -140,6 +161,7 @@ def delete_comment(video_id: str, comment_id: str, user_id: str):
     }
 
 
+# 좋아요 이벤트 기록
 def like_recipe(video_id: str, user_id: str):
     result = recipe_repo.create_like(video_id=video_id, user_id=user_id)
     return {
@@ -152,6 +174,7 @@ def like_recipe(video_id: str, user_id: str):
     }
 
 
+# 좋아요 취소 이벤트 기록
 def unlike_recipe(video_id: str, user_id: str):
     result = recipe_repo.delete_like(video_id=video_id, user_id=user_id)
     return {
@@ -164,6 +187,7 @@ def unlike_recipe(video_id: str, user_id: str):
     }
 
 
+# 북마크 이벤트 기록
 def bookmark_recipe(video_id: str, user_id: str):
     result = recipe_repo.create_bookmark(video_id=video_id, user_id=user_id)
     return {
@@ -176,6 +200,7 @@ def bookmark_recipe(video_id: str, user_id: str):
     }
 
 
+# 북마크 취소 이벤트 기록
 def unbookmark_recipe(video_id: str, user_id: str):
     result = recipe_repo.delete_bookmark(video_id=video_id, user_id=user_id)
     return {
@@ -188,6 +213,7 @@ def unbookmark_recipe(video_id: str, user_id: str):
     }
 
 
+# 공유 이벤트 기록
 def share_recipe(video_id: str, user_id: str):
     result = recipe_repo.create_share(video_id=video_id, user_id=user_id)
     return {
@@ -200,6 +226,7 @@ def share_recipe(video_id: str, user_id: str):
     }
 
 
+# 카테고리 기반 추천 레시피 목록 조회
 def get_recommended_videos_by_category(category: str, limit: int = 20):
     if category not in SUPPORTED_RECIPE_CATEGORIES:
         raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")

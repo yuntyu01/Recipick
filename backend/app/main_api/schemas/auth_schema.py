@@ -13,6 +13,7 @@ class AuthUserResponse(BaseModel):
     nickname: str
     profile_image: Optional[str] = None
     created_at: str
+    is_anonymous: bool = False
 
 
 class FirebaseAuthResponse(BaseModel):

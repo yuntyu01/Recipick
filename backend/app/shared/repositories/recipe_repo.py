@@ -3,19 +3,19 @@ from datetime import datetime, timezone
 from boto3.dynamodb.conditions import Key
 from app.shared.config import settings
 from botocore.exceptions import ClientError
+from typing import Optional
 
 dynamodb = boto3.resource('dynamodb', region_name=settings.REGION)
 user_table = dynamodb.Table(settings.USER_TABLE)
 recipe_table = dynamodb.Table(settings.RECIPE_TABLE)
 
 
+# UTC ISO 타임스탬프 생성
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
+# 레시피 기본 정보 조회
 def get_recipe(video_id: str):
-    """
-    DB에 해당 레시피가 있는지 확인 (캐싱용)
-    """
     response = recipe_table.get_item(
         Key={
             'PK': f'VIDEO#{video_id}',
@@ -24,10 +24,8 @@ def get_recipe(video_id: str):
     )
     return response.get('Item')
 
+# 초기 요청 시 PROCESSING 상태 저장
 def save_initial_recipe(video_id: str, original_url: str, sharer_nickname: str, title: str, channel_name: str):
-    """
-    최초 요청 시 "PROCESSING" 상태로 DB에 우선 저장, URL로 썸네일 만들어서 저장
-    """
     thumbnail_url = f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
     
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -50,10 +48,8 @@ def save_initial_recipe(video_id: str, original_url: str, sharer_nickname: str, 
     )
     return thumbnail_url
 
+# 분석 완료 데이터 반영 및 COMPLETED 상태 변경
 def update_completed_recipe(video_id: str, extracted_data: dict):
-    """
-    LLM 분석 완료 후 데이터를 추가로 넣고 상태를 COMPLETED로 변경
-    """
     recipe_table.update_item(
         Key={'PK': f'VIDEO#{video_id}', 'SK': 'INFO'},
         UpdateExpression="""
@@ -81,10 +77,8 @@ def update_completed_recipe(video_id: str, extracted_data: dict):
         }
     )
 
+# 레시피 처리 상태 갱신
 def update_status(video_id: str, new_status: str):
-    """
-    비동기 처리 중 에러 발생 시 상태를 FAILED로 변경하여 프론트 무한 로딩 방지
-    """
     recipe_table.update_item(
         Key={'PK': f'VIDEO#{video_id}', 'SK': 'INFO'},
         UpdateExpression="SET #st = :status_val",
@@ -93,25 +87,98 @@ def update_status(video_id: str, new_status: str):
     )
 
 
-def create_comment(video_id: str, user_id: str, nickname: str, content: str, like_count: int = 0):
-    # COMMENT#{timestamp}#{user_id} 키로 이벤트를 적재한다.
+# 익명 댓글 번호 원자적 증가
+def _increment_anonymous_counter(video_id: str) -> int:
+    response = recipe_table.update_item(
+        Key={"PK": f"VIDEO#{video_id}", "SK": "INFO"},
+        UpdateExpression="ADD anon_comment_seq :inc",
+        ExpressionAttributeValues={":inc": 1},
+        ReturnValues="UPDATED_NEW",
+    )
+    return int(response.get("Attributes", {}).get("anon_comment_seq", 1))
+
+
+# 익명 UID -> 번호 매핑 조회
+def _get_anonymous_mapping(video_id: str, anon_uid: str) -> Optional[int]:
+    response = recipe_table.get_item(
+        Key={"PK": f"VIDEO#{video_id}", "SK": f"ANON#{anon_uid}"}
+    )
+    item = response.get("Item")
+    if not item:
+        return None
+    return item.get("anonymous_number")
+
+
+# 익명 UID -> 번호 매핑 생성 (중복 방지)
+def _put_anonymous_mapping(video_id: str, anon_uid: str, anonymous_number: int) -> bool:
+    now = _utc_now_iso()
+    try:
+        recipe_table.put_item(
+            Item={
+                "PK": f"VIDEO#{video_id}",
+                "SK": f"ANON#{anon_uid}",
+                "user_id": anon_uid,
+                "anonymous_number": anonymous_number,
+                "created_at": now,
+            },
+            ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)",
+        )
+        return True
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+
+
+# 익명 댓글 번호 확보 (UID 있으면 고정)
+def get_or_create_anonymous_number(video_id: str, anon_uid: Optional[str]) -> int:
+    if anon_uid:
+        existing = _get_anonymous_mapping(video_id, anon_uid)
+        if existing is not None:
+            return int(existing)
+
+        new_number = _increment_anonymous_counter(video_id)
+        created = _put_anonymous_mapping(video_id, anon_uid, new_number)
+        if created:
+            return new_number
+
+        existing = _get_anonymous_mapping(video_id, anon_uid)
+        if existing is not None:
+            return int(existing)
+        return new_number
+
+    return _increment_anonymous_counter(video_id)
+
+
+# 댓글 이벤트 저장 및 카운트 증가
+def create_comment(
+    video_id: str,
+    user_id: str,
+    nickname: str,
+    content: str,
+    like_count: int = 0,
+    is_anonymous: bool = False,
+    anonymous_number: Optional[int] = None,
+):
     now = _utc_now_iso()
     comment_sk = f"COMMENT#{now}#{user_id}"
     recipe = get_recipe(video_id)
+    item = {
+        "PK": f"VIDEO#{video_id}",
+        "SK": comment_sk,
+        "user_id": user_id,
+        "nickname": nickname,
+        "is_anonymous": is_anonymous,
+        "content": content,
+        "like_count": like_count,
+        "created_at": now,
+        "recipe_title": recipe.get("title") if recipe else None,
+        "thumbnail_url": recipe.get("thumbnail_url") if recipe else None,
+    }
+    if anonymous_number is not None:
+        item["anonymous_number"] = anonymous_number
 
-    recipe_table.put_item(
-        Item={
-            "PK": f"VIDEO#{video_id}",
-            "SK": comment_sk,
-            "user_id": user_id,
-            "nickname": nickname,
-            "content": content,
-            "like_count": like_count,
-            "created_at": now,
-            "recipe_title": recipe.get("title") if recipe else None,
-            "thumbnail_url": recipe.get("thumbnail_url") if recipe else None
-        }
-    )
+    recipe_table.put_item(Item=item)
     recipe_table.update_item(
         Key={"PK": f"VIDEO#{video_id}", "SK": "INFO"},
         UpdateExpression="SET comment_count = if_not_exists(comment_count, :zero) + :inc",
@@ -122,12 +189,15 @@ def create_comment(video_id: str, user_id: str, nickname: str, content: str, lik
         "video_id": video_id,
         "user_id": user_id,
         "nickname": nickname,
+        "is_anonymous": is_anonymous,
+        "anonymous_number": anonymous_number,
         "content": content,
         "like_count": like_count,
         "created_at": now
     }
 
 
+# 댓글 목록 최신순 조회
 def list_comments(video_id: str, limit: int = 20):
     response = recipe_table.query(
         KeyConditionExpression=Key("PK").eq(f"VIDEO#{video_id}") & Key("SK").begins_with("COMMENT#"),
@@ -142,6 +212,8 @@ def list_comments(video_id: str, limit: int = 20):
                 "video_id": video_id,
                 "user_id": item.get("user_id"),
                 "nickname": item.get("nickname"),
+                "is_anonymous": item.get("is_anonymous", False),
+                "anonymous_number": item.get("anonymous_number"),
                 "content": item.get("content"),
                 "like_count": item.get("like_count", 0),
                 "created_at": item.get("created_at"),
@@ -150,6 +222,7 @@ def list_comments(video_id: str, limit: int = 20):
     return items
 
 
+# 단일 댓글 조회
 def get_comment(video_id: str, comment_id: str):
     response = recipe_table.get_item(
         Key={"PK": f"VIDEO#{video_id}", "SK": comment_id}
@@ -157,8 +230,8 @@ def get_comment(video_id: str, comment_id: str):
     return response.get("Item")
 
 
+# 본인 댓글만 수정되도록 조건부 업데이트
 def update_comment(video_id: str, comment_id: str, user_id: str, content: str):
-    # 조건부 업데이트로 "본인 댓글만 수정"을 강제한다.
     now = _utc_now_iso()
     try:
         response = recipe_table.update_item(
@@ -182,8 +255,8 @@ def update_comment(video_id: str, comment_id: str, user_id: str, content: str):
         return {"status": "FORBIDDEN"}
 
 
+# 본인 댓글만 삭제되도록 조건부 삭제 및 카운트 감소
 def delete_comment(video_id: str, comment_id: str, user_id: str):
-    # 조건부 삭제로 "본인 댓글만 삭제"를 강제하고, 성공 시 comment_count를 감소시킨다.
     try:
         response = recipe_table.delete_item(
             Key={"PK": f"VIDEO#{video_id}", "SK": comment_id},
@@ -212,29 +285,9 @@ def delete_comment(video_id: str, comment_id: str, user_id: str):
         return {"status": "FORBIDDEN"}
 
 
-def count_anonymous_comments(video_id: str) -> int:
-    # 익명 닉네임 번호 산정을 위해 영상 내 ANON 댓글 수를 센다.
-    count = 0
-    kwargs = {
-        "KeyConditionExpression": Key("PK").eq(f"VIDEO#{video_id}") & Key("SK").begins_with("COMMENT#"),
-        "ProjectionExpression": "user_id",
-    }
 
-    while True:
-        response = recipe_table.query(**kwargs)
-        for item in response.get("Items", []):
-            if str(item.get("user_id", "")).startswith("ANON#"):
-                count += 1
-
-        if "LastEvaluatedKey" not in response:
-            break
-        kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
-
-    return count
-
-
+# 좋아요 이벤트 저장 및 중복 방지
 def create_like(video_id: str, user_id: str):
-    # LIKE#{user_id} 단건 키 + ConditionExpression으로 중복 좋아요를 방지한다.
     now = _utc_now_iso()
     recipe = get_recipe(video_id)
 
@@ -262,6 +315,7 @@ def create_like(video_id: str, user_id: str):
         raise
 
 
+# 좋아요 삭제 및 카운트 감소
 def delete_like(video_id: str, user_id: str):
     response = recipe_table.delete_item(
         Key={"PK": f"VIDEO#{video_id}", "SK": f"LIKE#{user_id}"},
@@ -278,8 +332,8 @@ def delete_like(video_id: str, user_id: str):
     return {"success": True, "already_exists": not deleted}
 
 
+# 북마크 저장 및 중복 방지
 def create_bookmark(video_id: str, user_id: str):
-    # BOOKMARK#{user_id} 단건 키 + ConditionExpression으로 중복 북마크를 방지한다.
     now = _utc_now_iso()
     recipe = get_recipe(video_id)
 
@@ -302,6 +356,7 @@ def create_bookmark(video_id: str, user_id: str):
         raise
 
 
+# 북마크 삭제
 def delete_bookmark(video_id: str, user_id: str):
     response = recipe_table.delete_item(
         Key={"PK": f"VIDEO#{video_id}", "SK": f"BOOKMARK#{user_id}"},
@@ -311,8 +366,8 @@ def delete_bookmark(video_id: str, user_id: str):
     return {"success": True, "already_exists": not deleted}
 
 
+# 공유 이벤트 기록 및 카운트 증가
 def create_share(video_id: str, user_id: str):
-    # 공유는 이벤트성 데이터라 SHARE#{timestamp}#{user_id}로 다건 기록한다.
     now = _utc_now_iso()
     recipe = get_recipe(video_id)
     share_sk = f"SHARE#{now}#{user_id}"
@@ -335,6 +390,7 @@ def create_share(video_id: str, user_id: str):
     return {"success": True, "created_at": now}
 
 
+# 카테고리 인덱스 기반 추천 레시피 조회
 def list_recommended_videos_by_category(category: str, limit: int = 20):
     response = recipe_table.query(
         IndexName="CategoryIndex",
@@ -345,7 +401,7 @@ def list_recommended_videos_by_category(category: str, limit: int = 20):
 
     items = []
     for item in response.get("Items", []):
-        # CategoryIndex에는 다른 타입 엔티티도 섞일 수 있어 INFO/COMPLETED 레시피만 반환
+        # CategoryIndex 혼합 엔티티 필터링(INFO/COMPLETED 레시피만)
         if not str(item.get("PK", "")).startswith("VIDEO#"):
             continue
         if item.get("SK") != "INFO":

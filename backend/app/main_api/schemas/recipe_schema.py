@@ -29,6 +29,8 @@ class RecipeCommentResponse(BaseModel):
     video_id: str
     user_id: str
     nickname: str
+    is_anonymous: bool = False
+    anonymous_number: Optional[int] = None
     content: str
     like_count: int
     created_at: str

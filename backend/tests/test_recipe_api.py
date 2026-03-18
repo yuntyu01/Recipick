@@ -7,10 +7,7 @@ def _override_auth():
     app.dependency_overrides[recipe_router.get_current_auth_user] = lambda: {
         "user_id": "user123",
         "nickname": "요리왕",
-    }
-    app.dependency_overrides[recipe_router.get_optional_auth_user] = lambda: {
-        "user_id": "user123",
-        "nickname": "요리왕",
+        "is_anonymous": False,
     }
 
 
@@ -113,11 +110,16 @@ def test_get_recipe_not_found(client, monkeypatch):
 
 # 비로그인 댓글은 익명으로 저장되어야 한다.
 def test_create_comment_anonymous(client, monkeypatch):
-    app.dependency_overrides[recipe_router.get_optional_auth_user] = lambda: None
+    app.dependency_overrides[recipe_router.get_current_auth_user] = lambda: {
+        "user_id": "anonuid123",
+        "nickname": "익명",
+        "is_anonymous": True,
+    }
 
-    def fake_create_comment(video_id, content, like_count=0, user_id=None, nickname=None):
-        assert user_id is None
-        assert nickname is None
+    def fake_create_comment(video_id, content, like_count=0, user_id=None, nickname=None, is_anonymous=False):
+        assert user_id == "anonuid123"
+        assert nickname == "익명"
+        assert is_anonymous is True
         return {
             "comment_id": "COMMENT#1#ANON#1",
             "video_id": video_id,
@@ -138,7 +140,7 @@ def test_create_comment_anonymous(client, monkeypatch):
 def test_create_comment_authenticated(client, monkeypatch):
     _override_auth()
 
-    def fake_create_comment(video_id, content, like_count=0, user_id=None, nickname=None):
+    def fake_create_comment(video_id, content, like_count=0, user_id=None, nickname=None, is_anonymous=False):
         assert user_id == "user123"
         assert nickname == "요리왕"
         return {
@@ -182,6 +184,12 @@ def test_list_comments(client, monkeypatch):
 # 댓글 수정은 인증 필수
 def test_update_comment_requires_auth(client):
     res = client.patch("/api/recipes/test/comments", json={"comment_id": "COMMENT#1", "content": "edit"})
+    assert res.status_code == 401
+
+
+# 댓글 생성은 인증 필수
+def test_create_comment_requires_auth(client):
+    res = client.post("/api/recipes/test/comments", json={"content": "익명 댓글", "like_count": 0})
     assert res.status_code == 401
 
 

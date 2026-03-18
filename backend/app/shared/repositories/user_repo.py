@@ -9,10 +9,12 @@ user_table = dynamodb.Table(settings.USER_TABLE)
 recipe_table = dynamodb.Table(settings.RECIPE_TABLE)
 
 
+# UTC ISO 타임스탬프 생성
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+# 사용자 프로필 조회
 def get_user_profile(user_id: str):
     response = user_table.get_item(
         Key={"user_id": user_id}
@@ -20,6 +22,7 @@ def get_user_profile(user_id: str):
     return response.get("Item")
 
 
+# 사용자 프로필 생성/갱신
 def upsert_user_profile(user_id: str, nickname: str, profile_image: Optional[str]):
     existing = get_user_profile(user_id)
     created_at = existing.get("created_at") if existing else _utc_now_iso()
@@ -34,6 +37,7 @@ def upsert_user_profile(user_id: str, nickname: str, profile_image: Optional[str
     return item
 
 
+# 유저 히스토리 추가
 def add_user_history(
     user_id: str,
     video_id: str,
@@ -71,6 +75,7 @@ def add_user_history(
     return item
 
 
+# 유저 히스토리 최신순 조회
 def list_user_history(user_id: str, limit: int = 20):
     response = recipe_table.query(
         KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
@@ -80,6 +85,7 @@ def list_user_history(user_id: str, limit: int = 20):
     return response.get("Items", [])
 
 
+# 유저 활동 로그 최신순 조회
 def list_user_activities(user_id: str, limit: int = 20):
     response = recipe_table.query(
         IndexName="UserActivityIndex",
@@ -90,6 +96,7 @@ def list_user_activities(user_id: str, limit: int = 20):
     return response.get("Items", [])
 
 
+# 사용자 프로필 삭제 및 삭제 여부 반환
 def delete_user_profile(user_id: str) -> bool:
     response = user_table.delete_item(
         Key={"user_id": user_id},
@@ -98,6 +105,7 @@ def delete_user_profile(user_id: str) -> bool:
     return bool(response.get("Attributes"))
 
 
+# 유저 히스토리 전체 삭제 및 삭제 건수 반환
 def delete_all_user_history(user_id: str) -> int:
     deleted_count = 0
     query_kwargs = {
@@ -120,6 +128,7 @@ def delete_all_user_history(user_id: str) -> int:
     return deleted_count
 
 
+# 유저 활동 로그 삭제/익명화 및 결과 반환
 def delete_all_user_activities(user_id: str) -> int:
     deleted_count = 0
     anonymized_comment_count = 0
@@ -138,14 +147,15 @@ def delete_all_user_activities(user_id: str) -> int:
                 if not pk or not sk:
                     continue
 
-                # 댓글은 데이터 무결성을 위해 남기고 작성자 정보만 익명화한다.
+                # 댓글 유지 + 작성자 정보 익명화(데이터 무결성)
                 if str(sk).startswith("COMMENT#"):
                     recipe_table.update_item(
                         Key={"PK": pk, "SK": sk},
-                        UpdateExpression="SET user_id = :uid, nickname = :nickname",
+                        UpdateExpression="SET user_id = :uid, nickname = :nickname, is_anonymous = :is_anonymous",
                         ExpressionAttributeValues={
                             ":uid": "DELETED_USER",
-                            ":nickname": "알수없음"
+                            ":nickname": "알수없음",
+                            ":is_anonymous": True,
                         }
                     )
                     anonymized_comment_count += 1

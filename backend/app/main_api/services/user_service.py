@@ -3,6 +3,7 @@ from typing import Optional
 from app.shared.repositories import user_repo
 
 
+# Boto3 Decimal JSON 변환
 def _replace_decimals(obj):
     if isinstance(obj, list):
         return [_replace_decimals(i) for i in obj]
@@ -13,6 +14,7 @@ def _replace_decimals(obj):
     return obj
 
 
+# 유저 프로필 생성/갱신
 def upsert_user_profile(user_id: str, nickname: str, profile_image: Optional[str]):
     item = user_repo.upsert_user_profile(
         user_id=user_id,
@@ -22,6 +24,7 @@ def upsert_user_profile(user_id: str, nickname: str, profile_image: Optional[str
     return _replace_decimals(item)
 
 
+# 유저 프로필 조회
 def get_user_profile(user_id: str):
     item = user_repo.get_user_profile(user_id)
     if not item:
@@ -29,6 +32,7 @@ def get_user_profile(user_id: str):
     return _replace_decimals(item)
 
 
+# 유저 레시피 사용 이력 기록
 def create_user_history(
     user_id: str,
     video_id: str,
@@ -46,11 +50,13 @@ def create_user_history(
     return _replace_decimals(item)
 
 
+# 유저 최근 사용 이력 조회
 def get_user_history(user_id: str, limit: int = 20):
     items = user_repo.list_user_history(user_id=user_id, limit=limit)
     return _replace_decimals(items)
 
 
+# 유저 활동 로그 정규화/반환
 def get_user_activities(user_id: str, limit: int = 20):
     items = user_repo.list_user_activities(user_id=user_id, limit=limit)
     normalized = []
@@ -73,6 +79,7 @@ def get_user_activities(user_id: str, limit: int = 20):
     return _replace_decimals(normalized)
 
 
+# 유저 계정 데이터 삭제/익명화
 def delete_user_account_data(user_id: str):
     deleted_profile = user_repo.delete_user_profile(user_id)
     deleted_history_count = user_repo.delete_all_user_history(user_id)

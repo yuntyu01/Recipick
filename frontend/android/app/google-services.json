@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "1035075506580",
+    "project_id": "recipick-auth",
+    "storage_bucket": "recipick-auth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1035075506580:android:93e5666e4fcbc488daff81",
+        "android_client_info": {
+          "package_name": "com.anonymous.recipick"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1035075506580-8sha9t1t2mi2o66q2onjh3q4i7eq9c28.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-qahAZAwiSGG7_XsYZt5630AauyBf3t4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1035075506580-8sha9t1t2mi2o66q2onjh3q4i7eq9c28.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
