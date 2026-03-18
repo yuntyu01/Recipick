@@ -9,11 +9,13 @@ import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { signInAnonymously } from "firebase/auth";
+
+import { auth } from "./lib/firebase";
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -25,40 +27,56 @@ const s = (v: number) => Math.round(v * SCALE);
 const GREEN = "#48C7A0";
 const GREEN_SOFT = "#CFEFE3";
 const CARD = "#FFFFFF";
-const INPUT_BG = "#F2F2F2";
 const TEXT_DARK = "#0F172A";
 const TEXT_MUTED = "#64748B";
-const BLUE = "#2F6BFF";
+const BORDER = "#E7ECEF";
 
 export default function LoginPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [id, setId] = useState("");
-  const [pw, setPw] = useState("");
-  const [secure, setSecure] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const onLogin = async () => {
+  const goPreviewHomeWithAnonymousFirebase = async () => {
     if (loading) return;
-
-    if (!id.trim() || !pw.trim()) {
-      Alert.alert("확인", "아이디(이메일)와 비밀번호를 입력해줘.");
-      return;
-    }
 
     try {
       setLoading(true);
 
-      // TODO: 나중에 백엔드 붙이면 여기서 로그인 API 호출 후 받은 토큰 저장
-      // const { accessToken } = await loginApi(id, pw);
+      await SecureStore.deleteItemAsync("accessToken");
+      await SecureStore.deleteItemAsync("access_token");
+      await SecureStore.deleteItemAsync("refreshToken");
+      await SecureStore.deleteItemAsync("refresh_token");
+      await SecureStore.deleteItemAsync("userId");
+      await SecureStore.deleteItemAsync("nickname");
+      await SecureStore.deleteItemAsync("profileImage");
 
-      // ✅ 지금은 임시 토큰 저장 (자동로그인 동작 확인용)
-      await SecureStore.setItemAsync("accessToken", "dummy-token");
+      const userCredential = await signInAnonymously(auth);
+      const firebaseUser = userCredential.user;
+      const firebaseIdToken = await firebaseUser.getIdToken(true);
+
+      await SecureStore.setItemAsync("hasOnboarded", "true");
+      await SecureStore.setItemAsync("devPreviewMode", "true");
+      await SecureStore.setItemAsync("accessToken", firebaseIdToken);
+      await SecureStore.setItemAsync("userId", firebaseUser.uid);
+      await SecureStore.setItemAsync("nickname", "미리보기 사용자");
+      await SecureStore.setItemAsync("profileImage", "");
 
       router.replace("/home");
     } catch (e: any) {
-      Alert.alert("로그인 실패", e?.message ?? "다시 시도해줘.");
+      console.error("[ANONYMOUS PREVIEW LOGIN ERROR FULL]", e);
+      Alert.alert(
+        "익명 로그인 실패",
+        JSON.stringify(
+          {
+            code: e?.code,
+            message: e?.message,
+            name: e?.name,
+          },
+          null,
+          2
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -71,126 +89,86 @@ export default function LoginPage() {
     >
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Top green area */}
       <View style={styles.topArea}>
-        <Text style={styles.welcome}>Welcome</Text>
+        <Text style={styles.logo}>Recipick!</Text>
+        <Text style={styles.subtitle}>링크 하나로 레시피를 바로 만들어요</Text>
       </View>
 
-      {/* White card */}
       <View style={styles.card}>
-        <Text style={styles.label}>Username Or Email</Text>
-        <View style={styles.inputWrap}>
-          <TextInput
-            value={id}
-            onChangeText={setId}
-            placeholder="example@example.com"
-            placeholderTextColor="#B0B8C1"
-            style={styles.input}
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
+        <View style={styles.heroIconWrap}>
+          <Ionicons name="flask-outline" size={s(34)} color={GREEN} />
         </View>
 
-        <View style={{ height: s(14) }} />
+        <Text style={styles.title}>분석 가능한 미리보기 시작</Text>
+        <Text style={styles.desc}>
+          Expo Go에서는 구글 로그인이 막혀 있어서{"\n"}
+          임시로 Firebase 익명 로그인으로 홈과 레시피 분석을 사용할게요.
+        </Text>
 
-        <Text style={styles.label}>Password</Text>
-        <View style={styles.inputWrap}>
-          <TextInput
-            value={pw}
-            onChangeText={setPw}
-            placeholder="••••••••"
-            placeholderTextColor="#B0B8C1"
-            style={[styles.input, { paddingRight: s(44) }]}
-            secureTextEntry={secure}
-          />
-          <TouchableOpacity
-            onPress={() => setSecure((v) => !v)}
-            style={styles.eyeBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons
-              name={secure ? "eye-off-outline" : "eye-outline"}
-              size={s(18)}
-              color="#9AA0A6"
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: s(22) }} />
+        <View style={{ height: s(24) }} />
 
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={onLogin}
-          style={[styles.btnPrimary, loading && { opacity: 0.7 }]}
+          onPress={goPreviewHomeWithAnonymousFirebase}
+          style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
           disabled={loading}
         >
-          <Text style={styles.btnPrimaryText}>{loading ? "로그인 중..." : "로그인"}</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: s(10) }} />
-
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => router.push("/signup")}
-          style={styles.btnSecondary}
-          disabled={loading}
-        >
-          <Text style={styles.btnSecondaryText}>회원가입</Text>
+          <Ionicons
+            name="arrow-forward-circle-outline"
+            size={s(18)}
+            color="#FFFFFF"
+          />
+          <Text style={styles.primaryBtnText}>
+            {loading ? "준비 중..." : "분석 가능한 홈으로 가기"}
+          </Text>
         </TouchableOpacity>
 
         <View style={{ height: s(14) }} />
 
-        <TouchableOpacity activeOpacity={0.7} disabled={loading}>
-          <Text style={styles.forgot}>비밀번호를 잊어버리셨나요?</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: s(18) }} />
-
-        <Text style={styles.fingerprint}>Use Fingerprint To Access</Text>
-
-        <View style={{ height: s(16) }} />
-
-        <Text style={styles.orText}>or sign up with</Text>
-
-        <View style={{ height: s(14) }} />
-
-        <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85} disabled={loading}>
-            <Ionicons name="logo-facebook" size={s(18)} color={TEXT_DARK} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.socialBtn} activeOpacity={0.85} disabled={loading}>
-            <Ionicons name="logo-google" size={s(18)} color={TEXT_DARK} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: s(16) }} />
-
-        <View style={styles.bottomRow}>
-          <Text style={styles.bottomText}>Don’t have an account? </Text>
-          <TouchableOpacity onPress={() => router.push("/signup")} disabled={loading}>
-            <Text style={styles.bottomLink}>Sign Up</Text>
-          </TouchableOpacity>
+        <View style={styles.noticeBox}>
+          <Text style={styles.noticeText}>
+            • 이건 임시 개발용 로그인 방식이에요.
+          </Text>
+          <Text style={styles.noticeText}>
+            • 구글 로그인 대신 Firebase 익명 로그인을 사용해 분석 기능만 살립니다.
+          </Text>
+          <Text style={styles.noticeText}>
+            • 나중에 안드로이드 스튜디오 / Dev Build로 가면 구글 로그인으로 교체하면 돼요.
+          </Text>
         </View>
       </View>
 
-      {/* bottom spacing */}
       <View style={{ height: Math.max(s(18), insets.bottom) }} />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: GREEN },
+  screen: {
+    flex: 1,
+    backgroundColor: GREEN,
+  },
 
   topArea: {
-    height: SCREEN_H * 0.18,
+    height: SCREEN_H * 0.2,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: s(24),
   },
-  welcome: {
-    fontSize: s(28),
+
+  logo: {
+    fontSize: s(30),
     fontWeight: "900",
     color: TEXT_DARK,
+  },
+
+  subtitle: {
+    marginTop: s(8),
+    fontSize: s(13),
+    fontWeight: "700",
+    color: TEXT_DARK,
+    opacity: 0.75,
+    textAlign: "center",
   },
 
   card: {
@@ -198,68 +176,72 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderTopLeftRadius: s(42),
     borderTopRightRadius: s(42),
-    paddingTop: s(26),
+    paddingTop: s(32),
     paddingHorizontal: s(28),
   },
 
-  label: { fontSize: s(13), fontWeight: "800", color: TEXT_MUTED, marginBottom: s(8) },
-
-  inputWrap: {
-    height: s(44),
-    borderRadius: s(22),
-    backgroundColor: INPUT_BG,
-    justifyContent: "center",
-    paddingHorizontal: s(16),
-  },
-  input: {
-    fontSize: s(13),
-    color: TEXT_DARK,
-    paddingVertical: 0,
-  },
-  eyeBtn: {
-    position: "absolute",
-    right: s(14),
-    height: s(44),
-    justifyContent: "center",
-  },
-
-  btnPrimary: {
-    height: s(44),
-    borderRadius: s(22),
-    backgroundColor: GREEN,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnPrimaryText: { color: "#fff", fontSize: s(14), fontWeight: "900" },
-
-  btnSecondary: {
-    height: s(44),
-    borderRadius: s(22),
+  heroIconWrap: {
+    width: s(68),
+    height: s(68),
+    borderRadius: s(34),
     backgroundColor: GREEN_SOFT,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "center",
   },
-  btnSecondaryText: { color: TEXT_DARK, fontSize: s(14), fontWeight: "900" },
 
-  forgot: { textAlign: "center", fontSize: s(11), fontWeight: "700", color: TEXT_MUTED },
+  title: {
+    marginTop: s(18),
+    fontSize: s(22),
+    fontWeight: "900",
+    color: TEXT_DARK,
+    textAlign: "center",
+  },
 
-  fingerprint: { textAlign: "center", fontSize: s(11), fontWeight: "800", color: BLUE },
+  desc: {
+    marginTop: s(10),
+    fontSize: s(13),
+    lineHeight: s(20),
+    fontWeight: "700",
+    color: TEXT_MUTED,
+    textAlign: "center",
+  },
 
-  orText: { textAlign: "center", fontSize: s(11), fontWeight: "700", color: TEXT_MUTED },
-
-  socialRow: { flexDirection: "row", justifyContent: "center", gap: s(18) },
-  socialBtn: {
-    width: s(40),
-    height: s(40),
-    borderRadius: s(20),
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#E6E6E6",
+  primaryBtn: {
+    height: s(52),
+    borderRadius: s(26),
+    backgroundColor: GREEN,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: s(10),
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: s(8),
+    shadowOffset: { width: 0, height: s(4) },
+    elevation: 3,
   },
 
-  bottomRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
-  bottomText: { fontSize: s(11), color: TEXT_MUTED, fontWeight: "700" },
-  bottomLink: { fontSize: s(11), color: BLUE, fontWeight: "900" },
+  primaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: s(15),
+    fontWeight: "900",
+  },
+
+  noticeBox: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: s(16),
+    paddingVertical: s(14),
+    paddingHorizontal: s(14),
+    backgroundColor: "#F8FAFB",
+    gap: s(8),
+  },
+
+  noticeText: {
+    fontSize: s(12),
+    lineHeight: s(18),
+    fontWeight: "700",
+    color: TEXT_MUTED,
+  },
 });

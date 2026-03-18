@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -12,7 +13,16 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getUserHistory } from './lib/api';
+import {
+    getMeWithToken,
+    getRecipe,
+    getUserHistory,
+    getUserIdFromMe,
+    normalizeUserHistory,
+    type RecipeData,
+    type UserHistoryItem,
+    type UserHistoryRecipeData,
+} from './lib/api';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -35,32 +45,53 @@ type MyRecipeItem = {
     thumbUrl?: string;
     price?: string;
     createdAt?: string;
-    recipeData?: any;
+    category?: string;
+    url: string;
+    recipeData?: RecipeData | UserHistoryRecipeData | null;
 };
-
-function formatWon(value: any) {
-    if (value === undefined || value === null || value === '') return '';
-    const num = Number(value);
-    if (Number.isNaN(num)) return `${value}원`;
-    return `${num.toLocaleString('ko-KR')}원`;
-}
-
-function getCurrentUserId() {
-    // TODO: 실제 로그인 유저 ID 연결
-    return 'firebase_uid_123';
-}
-
-function normalizeHistoryResponse(raw: any): any[] {
-    if (Array.isArray(raw)) return raw;
-    if (Array.isArray(raw?.items)) return raw.items;
-    if (Array.isArray(raw?.data)) return raw.data;
-    if (Array.isArray(raw?.histories)) return raw.histories;
-    return [];
-}
 
 function buildYoutubeUrl(videoId?: string) {
     if (!videoId) return '';
     return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+function formatWon(value: any) {
+    if (value === undefined || value === null || value === '') return '';
+    const raw = String(value).replace(/[^\d.-]/g, '');
+    const num = Number(raw);
+
+    if (Number.isNaN(num)) {
+        return String(value).includes('원') ? String(value) : `${value}원`;
+    }
+
+    return `${num.toLocaleString('ko-KR')}원`;
+}
+
+function mapHistoryItemToMyRecipe(item: UserHistoryItem, index: number): MyRecipeItem {
+    const videoId = item.video_id ?? '';
+    const url =
+        item.original_url ||
+        item.url ||
+        (videoId ? buildYoutubeUrl(videoId) : '');
+
+    return {
+        id: `history-${videoId}-${item.saved_at || item.created_at || index}`,
+        videoId,
+        title: item.recipe_title || item.title || '제목 없음',
+        channelName: item.channel_name || '채널명 없음',
+        thumbUrl:
+            item.thumbnail_url ||
+            (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''),
+        price: formatWon(item.total_estimated_price),
+        createdAt: item.saved_at || item.created_at || '',
+        category: item.category || '',
+        url,
+        recipeData: item.recipe_data ?? null,
+    };
+}
+
+function isFullRecipeData(data: any): data is RecipeData {
+    return !!data && Array.isArray(data.steps) && Array.isArray(data.ingredients);
 }
 
 export default function MyRecipesPage() {
@@ -70,7 +101,26 @@ export default function MyRecipesPage() {
     const [items, setItems] = useState<MyRecipeItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    const getAccessToken = async () => {
+        const token =
+            (await SecureStore.getItemAsync('accessToken')) ||
+            (await SecureStore.getItemAsync('access_token'));
+
+        if (!token) {
+            throw new Error('로그인 토큰이 없어요.');
+        }
+
+        return token;
+    };
+
+    const getCurrentUserId = async () => {
+        const token = await getAccessToken();
+        const me = await getMeWithToken(token);
+        return getUserIdFromMe(me);
+    };
 
     const loadMyRecipes = useCallback(async (isRefresh = false) => {
         try {
@@ -79,45 +129,23 @@ export default function MyRecipesPage() {
 
             setError(null);
 
-            const userId = getCurrentUserId();
-            const res = await getUserHistory(userId, 50);
-            const list = normalizeHistoryResponse(res);
+            const userId = await getCurrentUserId();
 
-            console.log('[MY HISTORY RAW]', res);
-            console.log('[MY HISTORY LIST]', list);
-            console.log('[MY HISTORY FIRST ITEM]', list?.[0]);
+            if (!userId) {
+                setItems([]);
+                setError('사용자 정보를 찾을 수 없어요.');
+                return;
+            }
 
-            const mapped: MyRecipeItem[] = list.map((item: any, index: number) => {
-                const recipeData = item.recipe_data ?? item.recipeData ?? item.data ?? null;
-
-                return {
-                    id: String(item.id ?? `${item.video_id ?? 'recipe'}-${index}`),
-                    videoId: item.video_id ?? '',
-                    title:
-                        item.recipe_title ||
-                        item.title ||
-                        recipeData?.title ||
-                        '제목 없음',
-                    channelName:
-                        item.channel_name ||
-                        item.channel ||
-                        recipeData?.channel_name ||
-                        recipeData?.channel ||
-                        '채널명 없음',
-                    thumbUrl:
-                        item.thumbnail_url ||
-                        recipeData?.thumbnail_url ||
-                        (item.video_id ? `https://img.youtube.com/vi/${item.video_id}/hqdefault.jpg` : ''),
-                    price: formatWon(item.total_estimated_price ?? recipeData?.total_estimated_price),
-                    createdAt: item.created_at || item.createdAt || '',
-                    recipeData,
-                };
-            });
+            const historyRes = await getUserHistory(userId, 50);
+            const historyItems = normalizeUserHistory(historyRes);
+            const mapped = historyItems.map(mapHistoryItemToMyRecipe);
 
             setItems(mapped);
-        } catch (e) {
+        } catch (e: any) {
             console.log('[MY RECIPES LOAD ERROR]', e);
-            setError('내 레시피를 불러오지 못했어요.');
+            setItems([]);
+            setError(e?.message || '내 레시피를 불러오지 못했어요.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -130,19 +158,57 @@ export default function MyRecipesPage() {
         }, [loadMyRecipes])
     );
 
-    const goToRecipe = (item: MyRecipeItem) => {
-        router.push({
-            pathname: '/create-link',
-            params: {
-                video_id: item.videoId,
-                title: item.title,
-                channel_name: item.channelName,
-                thumbnail_url: item.thumbUrl || '',
-                url: buildYoutubeUrl(item.videoId),
-                link: buildYoutubeUrl(item.videoId),
-                recipe_data: item.recipeData ? JSON.stringify(item.recipeData) : '',
-            },
-        });
+    const goToRecipe = async (item: MyRecipeItem) => {
+        try {
+            if (!item.videoId) {
+                setError('레시피 정보를 찾을 수 없어요.');
+                return;
+            }
+
+            setDetailLoadingId(item.id);
+            setError(null);
+
+            if (item.recipeData && isFullRecipeData(item.recipeData)) {
+                router.push({
+                    pathname: '/create-link',
+                    params: {
+                        video_id: item.videoId,
+                        title: item.title,
+                        channel_name: item.channelName,
+                        thumbnail_url: item.thumbUrl || '',
+                        url: item.url,
+                        link: item.url,
+                        recipe_data: JSON.stringify(item.recipeData ?? null),
+                    },
+                });
+                return;
+            }
+
+            const detail = await getRecipe(item.videoId);
+
+            if (detail.status !== 'COMPLETED' || !detail.data) {
+                setError('레시피 상세 정보를 불러오지 못했어요.');
+                return;
+            }
+
+            router.push({
+                pathname: '/create-link',
+                params: {
+                    video_id: detail.video_id,
+                    title: detail.title || item.title,
+                    channel_name: detail.channel_name || item.channelName,
+                    thumbnail_url: detail.thumbnail_url || item.thumbUrl || '',
+                    url: item.url || buildYoutubeUrl(detail.video_id),
+                    link: item.url || buildYoutubeUrl(detail.video_id),
+                    recipe_data: JSON.stringify(detail.data ?? null),
+                },
+            });
+        } catch (e: any) {
+            console.log('[MY RECIPE DETAIL LOAD ERROR]', e);
+            setError(e?.message || '레시피 상세 정보를 불러오는 중 오류가 났어요.');
+        } finally {
+            setDetailLoadingId(null);
+        }
     };
 
     return (
@@ -172,6 +238,11 @@ export default function MyRecipesPage() {
             {loading && !refreshing && (
                 <Text style={styles.infoText}>내 레시피 불러오는 중...</Text>
             )}
+
+            {!!detailLoadingId && (
+                <Text style={styles.infoText}>레시피 상세 정보 불러오는 중...</Text>
+            )}
+
             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
             <View style={styles.listWrap}>
@@ -201,11 +272,14 @@ export default function MyRecipesPage() {
 
                                 <View style={styles.bottomRow}>
                                     <Text style={styles.createdText} numberOfLines={1}>
-                                        {r.createdAt ? '최근 저장됨' : ''}
+                                        {r.category || ''}
                                     </Text>
-                                    <Text style={styles.priceText} numberOfLines={1}>
-                                        {r.price || ''}
-                                    </Text>
+
+                                    {!!r.price && (
+                                        <Text style={styles.priceText} numberOfLines={1}>
+                                            {r.price}
+                                        </Text>
+                                    )}
                                 </View>
                             </View>
                         </View>
@@ -214,7 +288,7 @@ export default function MyRecipesPage() {
 
                 {!loading && items.length === 0 && !error && (
                     <View style={styles.emptyBox}>
-                        <Text style={styles.emptyText}>아직 저장된 레시피가 없어요.</Text>
+                        <Text style={styles.emptyText}>아직 저장한 레시피가 없어요.</Text>
                     </View>
                 )}
             </View>
@@ -340,20 +414,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
+        gap: s(8),
     },
     createdText: {
         fontSize: s(11),
         fontWeight: '700',
         color: SECTION,
         opacity: 0.75,
-        flexShrink: 1,
+        flex: 1,
     },
     priceText: {
         fontSize: s(11),
         fontWeight: '900',
         color: SECTION,
-        marginLeft: s(10),
-        flexShrink: 0,
     },
 
     emptyBox: {

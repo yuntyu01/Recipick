@@ -1,47 +1,32 @@
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useEffect } from 'react';
-import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import React, { useEffect } from "react";
+import * as SecureStore from "expo-secure-store";
+import { useRouter } from "expo-router";
+import SplashScreenPage from "./splash";
 
-export default function Index() {
+export default function IndexPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const boot = async () => {
-      // 런치 연출
-      await new Promise((r) => setTimeout(r, 800));
+    const bootstrap = async () => {
+      try {
+        const hasOnboarded = await SecureStore.getItemAsync("hasOnboarded");
 
-      const hasOnboarded = await SecureStore.getItemAsync('hasOnboarded');
-      if (!hasOnboarded) {
-        router.replace('/onboarding'); // ✅ 처음만 온보딩
-        return;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+
+        if (hasOnboarded === "true") {
+          router.replace("/login");
+          return;
+        }
+
+        router.replace("/onboarding");
+      } catch (e) {
+        console.log("[INDEX BOOTSTRAP ERROR]", e);
+        router.replace("/login");
       }
-
-      const token = await SecureStore.getItemAsync('accessToken');
-      router.replace(token ? '/home' : '/login');
     };
 
-    boot();
-  }, []);
+    bootstrap();
+  }, [router]);
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.logo}>Recipick!</Text>
-      <ActivityIndicator color="#fff" style={{ marginTop: 20 }} />
-    </View>
-  );
+  return <SplashScreenPage />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#54CDA4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logo: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '900',
-  },
-});
