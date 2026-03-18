@@ -1,8 +1,26 @@
-// frontend/app/home.tsx
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { analyzeRecipe, createUserHistory, waitRecipeCompleted } from './lib/api';
+import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+import { useRouter } from 'expo-router';
+
+import {
+  analyzeRecipe,
+  buildUserHistoryPayloadFromRecipe,
+  createUserHistory,
+  getMeWithToken,
+  getRecipe,
+  getRecommendationsByCategory,
+  getUserHistory,
+  getUserIdFromMe,
+  normalizeRecommendations,
+  normalizeUserHistory,
+  waitRecipeCompleted,
+  type RecommendationItem,
+  type RecipeCategory,
+  type RecipeData,
+  type UserHistoryItem,
+  type UserHistoryRecipeData,
+} from './lib/api';
 import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from './lib/youtube';
 import {
   Dimensions,
@@ -54,6 +72,7 @@ const CATEGORIES: CategoryItem[] = (Object.keys(CATEGORY_ICONS) as CategoryKey[]
 /* ---------- home feed types ---------- */
 type HomeRecipeItem = {
   id: string;
+  source: 'history' | 'recommend';
   videoId: string;
   url: string;
   title: string;
@@ -64,36 +83,10 @@ type HomeRecipeItem = {
   likeCount?: string;
   commentCount?: string;
   shareCount?: string;
-  recipeData?: any;
+  recipeData?: RecipeData | UserHistoryRecipeData | null;
+  savedAt?: string;
 };
 
-type SeedRecipe = {
-  id: string;
-  url: string;
-};
-
-/* ---------- seed urls ----------
-   여기 URL들은 네가 원하는 실제 요리 영상으로 바꾸면 됨
-*/
-const MY_RECIPE_SEEDS: SeedRecipe[] = [
-  { id: 'my-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'my-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-];
-
-const RECOMMEND_SEEDS: SeedRecipe[] = [
-  { id: 'rec-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'rec-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-];
-
-const RECENT_SEEDS: SeedRecipe[] = [
-  { id: 'recent-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'recent-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'recent-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'recent-4', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-  { id: 'recent-5', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-];
-
-/* ---------- (유지) two-col calc ---------- */
 const TWO_COL_GAP = s(10);
 const TWO_COL_SIDE = s(18);
 const TWO_COL_CARD_W = (SCREEN_W - TWO_COL_SIDE * 2 - TWO_COL_GAP) / 2;
@@ -121,19 +114,63 @@ const H_LIST_GAP = s(10);
 const H_CARD_W = s(229);
 const H_THUMB_H = s(127);
 
-function getCurrentUserId() {
-  // TODO:
-  // 1) Firebase 로그인 붙어 있으면 uid 반환
-  // 2) 백엔드 auth/me 붙어 있으면 그 user_id 반환
-  // 지금은 임시값
-  return 'firebase_uid_123';
-}
-
 function formatWon(value: any) {
   if (value === undefined || value === null || value === '') return '';
-  const num = Number(value);
-  if (Number.isNaN(num)) return `${value}원`;
+  const raw = String(value).replace(/[^\d.-]/g, '');
+  const num = Number(raw);
+
+  if (Number.isNaN(num)) {
+    return String(value).includes('원') ? String(value) : `${value}원`;
+  }
+
   return `${num.toLocaleString('ko-KR')}원`;
+}
+
+function mapHistoryItemToHome(item: UserHistoryItem): HomeRecipeItem {
+  const videoId = item.video_id ?? '';
+  const url =
+    item.original_url ||
+    item.url ||
+    (videoId ? `https://www.youtube.com/watch?v=${videoId}` : '');
+
+  return {
+    id: `history-${videoId}-${item.saved_at || item.created_at || Math.random()}`,
+    source: 'history',
+    videoId,
+    url,
+    title: item.recipe_title || item.title || '제목 없음',
+    channelName: item.channel_name || '채널명 없음',
+    thumbUrl: item.thumbnail_url || '',
+    category: item.category || '',
+    totalEstimatedPrice: formatWon(item.total_estimated_price),
+    likeCount: String(item.like_count ?? '0'),
+    commentCount: String(item.comment_count ?? '0'),
+    shareCount: String(item.share_count ?? '0'),
+    recipeData: item.recipe_data ?? null,
+    savedAt: item.saved_at || item.created_at || '',
+  };
+}
+
+function mapRecommendationItemToHome(item: RecommendationItem): HomeRecipeItem {
+  return {
+    id: `recommend-${item.video_id}`,
+    source: 'recommend',
+    videoId: item.video_id,
+    url: item.url || `https://www.youtube.com/watch?v=${item.video_id}`,
+    title: item.title || '제목 없음',
+    channelName: item.channel_name || '채널명 없음',
+    thumbUrl: item.thumbnail_url || '',
+    category: item.category || '',
+    totalEstimatedPrice: '',
+    likeCount: '0',
+    commentCount: '0',
+    shareCount: '0',
+    recipeData: null,
+  };
+}
+
+function isFullRecipeData(data: any): data is RecipeData {
+  return !!data && Array.isArray(data.steps) && Array.isArray(data.ingredients);
 }
 
 export default function Home() {
@@ -156,12 +193,14 @@ export default function Home() {
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
+  const [userId, setUserId] = useState<string>('');
   const [myRecipes, setMyRecipes] = useState<HomeRecipeItem[]>([]);
   const [recommendRecipes, setRecommendRecipes] = useState<HomeRecipeItem[]>([]);
   const [recentRecipes, setRecentRecipes] = useState<HomeRecipeItem[]>([]);
 
   const [homeFeedLoading, setHomeFeedLoading] = useState(false);
   const [homeFeedError, setHomeFeedError] = useState<string | null>(null);
+  const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
 
   const oembedTimer = useRef<any>(null);
 
@@ -170,6 +209,24 @@ export default function Home() {
   const profileTop = insets.top + s(FIGMA_PROFILE_T) - TOP_TUNE;
   const ctaTop = insets.top + s(FIGMA_CTA_T) - TOP_TUNE;
   const topAreaHeight = ctaTop + s(FIGMA_CTA_H) + s(16);
+
+  const getAccessToken = async () => {
+    const token =
+      (await SecureStore.getItemAsync('accessToken')) ||
+      (await SecureStore.getItemAsync('access_token'));
+
+    if (!token) {
+      throw new Error('로그인 토큰이 없어요.');
+    }
+
+    return token;
+  };
+
+  const getCurrentUserId = async () => {
+    const token = await getAccessToken();
+    const me = await getMeWithToken(token);
+    return getUserIdFromMe(me);
+  };
 
   const handleLinkChange = (text: string) => {
     setLink(text);
@@ -220,95 +277,151 @@ export default function Home() {
     if (oembedTimer.current) clearTimeout(oembedTimer.current);
   };
 
-  const goToRecipeDetail = (item: HomeRecipeItem) => {
+  const openCreateLinkScreen = ({
+    url,
+    videoId,
+    title,
+    channelName,
+    thumbnailUrl,
+    recipeData,
+  }: {
+    url: string;
+    videoId: string;
+    title: string;
+    channelName: string;
+    thumbnailUrl?: string;
+    recipeData: any;
+  }) => {
     router.push({
       pathname: '/create-link',
       params: {
-        link: item.url,
-        url: item.url,
-        video_id: item.videoId,
-        title: item.title,
-        channel_name: item.channelName,
-        thumbnail_url: item.thumbUrl || '',
-        recipe_data: JSON.stringify(item.recipeData ?? null),
+        link: url,
+        url,
+        video_id: videoId,
+        title,
+        channel_name: channelName,
+        thumbnail_url: thumbnailUrl || '',
+        recipe_data: JSON.stringify(recipeData ?? null),
       },
     });
   };
 
-  const analyzeSeedRecipe = async (seed: SeedRecipe): Promise<HomeRecipeItem | null> => {
+  const goToRecipeDetail = async (item: HomeRecipeItem) => {
     try {
-      const videoId = extractYouTubeVideoId(seed.url);
-      if (!videoId) return null;
+      setAnalyzeError(null);
+      setDetailLoadingId(item.id);
 
-      const meta = await buildYoutubeMetaFromUrl(seed.url).catch(() => null);
+      if (item.recipeData && isFullRecipeData(item.recipeData)) {
+        openCreateLinkScreen({
+          url: item.url,
+          videoId: item.videoId,
+          title: item.title,
+          channelName: item.channelName,
+          thumbnailUrl: item.thumbUrl,
+          recipeData: item.recipeData,
+        });
+        return;
+      }
 
-      const safeTitle = meta?.title?.trim() || '제목 없음';
-      const safeChannelName = meta?.channel_name?.trim() || '채널명 없음';
+      const detail = await getRecipe(item.videoId);
 
-      const requestBody = {
-        video_id: videoId,
-        original_url: `https://www.youtube.com/watch?v=${videoId}`,
-        sharer_nickname: '익명',
-        title: safeTitle,
-        channel_name: safeChannelName,
-      };
+      if (detail.status === 'COMPLETED' && detail.data) {
+        openCreateLinkScreen({
+          url: item.url,
+          videoId: detail.video_id,
+          title: detail.title || item.title,
+          channelName: detail.channel_name || item.channelName,
+          thumbnailUrl: detail.thumbnail_url || item.thumbUrl || '',
+          recipeData: detail.data,
+        });
+        return;
+      }
 
-      const first = await analyzeRecipe(requestBody);
+      if (item.source === 'recommend') {
+        setAnalyzeError('이 추천 영상은 아직 분석된 레시피가 없어서 먼저 분석이 필요해.');
+        return;
+      }
 
-      const finalRes =
-        first.status === 'PROCESSING'
-          ? await waitRecipeCompleted(first.video_id, {
-            intervalMs: 1500,
-            timeoutMs: 180000,
-          })
-          : first;
-
-      if (finalRes.status !== 'COMPLETED' || !finalRes.data) return null;
-
-      return {
-        id: seed.id,
-        videoId: finalRes.video_id,
-        url: seed.url,
-        title: finalRes.title || safeTitle,
-        channelName: finalRes.channel_name || safeChannelName,
-        thumbUrl: finalRes.thumbnail_url || meta?.thumbnail_url || '',
-        category: finalRes.data?.data?.category ?? '',
-        totalEstimatedPrice: formatWon(finalRes.data?.data?.total_estimated_price),
-        likeCount: String(finalRes.data?.data?.like_count ?? '0'),
-        commentCount: String(finalRes.data?.data?.comment_count ?? '0'),
-        shareCount: String(finalRes.data?.data?.share_count ?? '0'),
-        recipeData: finalRes.data?.data ?? null,
-      };
-    } catch (e) {
-      console.log('[HOME analyzeSeedRecipe error]', seed.url, e);
-      return null;
+      setAnalyzeError('레시피 상세 정보를 불러오지 못했어.');
+    } catch (e: any) {
+      console.error('[GO TO RECIPE DETAIL ERROR]', e);
+      setAnalyzeError(e?.message || '레시피 상세 조회 중 오류가 났어.');
+    } finally {
+      setDetailLoadingId(null);
     }
   };
 
-  const loadHomeFeed = async () => {
+  const loadHomeFeed = async (resolvedUserId?: string) => {
     try {
       setHomeFeedLoading(true);
       setHomeFeedError(null);
 
-      const [myList, recommendList, recentList] = await Promise.all([
-        Promise.all(MY_RECIPE_SEEDS.map(analyzeSeedRecipe)),
-        Promise.all(RECOMMEND_SEEDS.map(analyzeSeedRecipe)),
-        Promise.all(RECENT_SEEDS.map(analyzeSeedRecipe)),
+      let currentUserId = resolvedUserId || userId;
+
+      if (!currentUserId) {
+        currentUserId = await getCurrentUserId();
+        setUserId(currentUserId);
+      }
+
+      const recommendCategory: RecipeCategory = '한식';
+
+      const [historyResult, recommendResult] = await Promise.allSettled([
+        currentUserId ? getUserHistory(currentUserId, 20) : Promise.resolve([]),
+        getRecommendationsByCategory(recommendCategory),
       ]);
 
-      setMyRecipes(myList.filter(Boolean) as HomeRecipeItem[]);
-      setRecommendRecipes(recommendList.filter(Boolean) as HomeRecipeItem[]);
-      setRecentRecipes(recentList.filter(Boolean) as HomeRecipeItem[]);
+      if (historyResult.status === 'fulfilled') {
+        const historyItems = normalizeUserHistory(historyResult.value).map(mapHistoryItemToHome);
+        setMyRecipes(historyItems.slice(0, 10));
+        setRecentRecipes(historyItems.slice(0, 5));
+      } else {
+        console.log('[HOME HISTORY ERROR]', historyResult.reason);
+        setMyRecipes([]);
+        setRecentRecipes([]);
+      }
+
+      if (recommendResult.status === 'fulfilled') {
+        const recommendItems = normalizeRecommendations(recommendResult.value).map(
+          mapRecommendationItemToHome
+        );
+        setRecommendRecipes(recommendItems.slice(0, 10));
+      } else {
+        console.log('[HOME RECOMMEND ERROR]', recommendResult.reason);
+        setRecommendRecipes([]);
+      }
     } catch (e: any) {
       console.log('[HOME loadHomeFeed error]', e);
-      setHomeFeedError('홈 데이터를 불러오지 못했어요.');
+      setHomeFeedError(e?.message || '홈 데이터를 불러오지 못했어요.');
     } finally {
       setHomeFeedLoading(false);
     }
   };
 
   useEffect(() => {
-    loadHomeFeed();
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        const resolvedUserId = await getCurrentUserId();
+
+        if (!mounted) return;
+
+        setUserId(resolvedUserId);
+        await loadHomeFeed(resolvedUserId);
+      } catch (e: any) {
+        console.log('[HOME INIT ERROR]', e);
+        if (!mounted) return;
+        setHomeFeedError(e?.message || '사용자 정보를 불러오지 못했어요.');
+        await loadHomeFeed('');
+      }
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+      if (oembedTimer.current) clearTimeout(oembedTimer.current);
+    };
   }, []);
 
   const handleDone = async () => {
@@ -319,7 +432,7 @@ export default function Home() {
       return;
     }
 
-    setAnalyzeError('');
+    setAnalyzeError(null);
 
     try {
       setAnalyzeLoading(true);
@@ -329,6 +442,13 @@ export default function Home() {
       if (!videoId) {
         setAnalyzeError('유효한 유튜브 링크가 아니야.');
         return;
+      }
+
+      let resolvedUserId = userId;
+
+      if (!resolvedUserId) {
+        resolvedUserId = await getCurrentUserId();
+        setUserId(resolvedUserId);
       }
 
       const safeTitle = videoMeta?.title?.trim() || '제목 없음';
@@ -355,54 +475,54 @@ export default function Home() {
             timeoutMs: 180000,
           })
           : first;
+
       console.log('[CATEGORY RAW]', finalRes.data?.category);
       console.log('[FULL ANALYSIS DATA]', finalRes.data);
-
       console.log('[ANALYZE FINAL RESPONSE]', finalRes);
 
       if (finalRes.status === 'FAILED') {
         setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
         return;
       }
-      if (finalRes.status === 'COMPLETED') {
-        try {
-          const userId = getCurrentUserId();
 
-          await createUserHistory(userId, {
-            video_id: finalRes.video_id ?? videoId,
-            recipe_title: finalRes.title || safeTitle,
-            thumbnail_url: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
-            channel_name: finalRes.channel_name || safeChannelName,
-            total_estimated_price: finalRes.data?.total_estimated_price ?? null,
-            category: finalRes.data?.category ?? '',
-            recipe_data: finalRes.data ?? null,
-          });
-
-        } catch (historyError) {
-          console.log('[CREATE USER HISTORY ERROR]', historyError);
-        }
+      if (finalRes.status !== 'COMPLETED' || !finalRes.data) {
+        setAnalyzeError('분석 결과가 아직 준비되지 않았어.');
+        return;
       }
 
-      router.push({
-        pathname: '/create-link',
-        params: {
-          link: trimmed,
-          url: trimmed,
-          video_id: finalRes.video_id ?? videoId,
-          title: finalRes.title || safeTitle,
-          channel_name: finalRes.channel_name || safeChannelName,
-          thumbnail_url: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
-          recipe_data: JSON.stringify(finalRes.data ?? null),
-        },
+      try {
+        if (resolvedUserId) {
+          await createUserHistorySafe(resolvedUserId, finalRes.data);
+        }
+      } catch (historyError) {
+        console.log('[CREATE USER HISTORY ERROR]', historyError);
+      }
+
+      openCreateLinkScreen({
+        url: trimmed,
+        videoId: finalRes.video_id ?? videoId,
+        title: finalRes.title || safeTitle,
+        channelName: finalRes.channel_name || safeChannelName,
+        thumbnailUrl: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
+        recipeData: finalRes.data,
       });
 
       setShowCreatePanel(false);
+      setLink('');
+      setVideoMeta(null);
+
+      await loadHomeFeed(resolvedUserId);
     } catch (e: any) {
       console.error('[HANDLE DONE ERROR]', e);
       setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
     } finally {
       setAnalyzeLoading(false);
     }
+  };
+
+  const createUserHistorySafe = async (resolvedUserId: string, recipe: RecipeData) => {
+    const payload = buildUserHistoryPayloadFromRecipe(recipe);
+    await createUserHistory(resolvedUserId, payload);
   };
 
   return (
@@ -554,6 +674,7 @@ export default function Home() {
 
       {homeFeedLoading && <Text style={styles.homeFeedHint}>홈 레시피 불러오는 중...</Text>}
       {!!homeFeedError && <Text style={styles.oembedError}>{homeFeedError}</Text>}
+      {!!detailLoadingId && <Text style={styles.homeFeedHint}>레시피 상세 정보 불러오는 중...</Text>}
 
       <SectionHeader title="내 레시피" onPressRight={() => router.push('/my-recipes')} />
       <FlatList
@@ -565,12 +686,15 @@ export default function Home() {
         ItemSeparatorComponent={() => <View style={{ width: H_LIST_GAP }} />}
         snapToInterval={H_CARD_W + H_LIST_GAP}
         decelerationRate="fast"
+        ListEmptyComponent={
+          !homeFeedLoading ? <Text style={styles.emptyText}>아직 저장된 레시피가 없어.</Text> : null
+        }
         renderItem={({ item }) => (
           <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
         )}
       />
 
-      <SectionHeader title="Recipick! 추천 레시피" onPressRight={() => router.push('/category/추천')} />
+      <SectionHeader title="Recipick! 추천 레시피" onPressRight={() => router.push('/category/한식')} />
       <FlatList
         horizontal
         data={recommendRecipes}
@@ -580,6 +704,9 @@ export default function Home() {
         ItemSeparatorComponent={() => <View style={{ width: H_LIST_GAP }} />}
         snapToInterval={H_CARD_W + H_LIST_GAP}
         decelerationRate="fast"
+        ListEmptyComponent={
+          !homeFeedLoading ? <Text style={styles.emptyText}>추천 레시피가 아직 없어.</Text> : null
+        }
         renderItem={({ item }) => (
           <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
         )}
@@ -588,43 +715,49 @@ export default function Home() {
       <Text style={styles.recentHeader}>최근 많이 사용한 레시피</Text>
 
       <View style={styles.recentBox}>
-        {recentRecipes.map((r, idx) => (
-          <TouchableOpacity
-            key={r.id}
-            activeOpacity={0.92}
-            style={[styles.recentCard, idx > 0 && { marginTop: s(12) }]}
-            onPress={() => goToRecipeDetail(r)}
-          >
-            <View style={styles.recentInner}>
-              <View style={styles.recentLeft}>
-                <Thumb style={styles.recentThumb} uri={r.thumbUrl} borderRadius={s(13.5)} />
-                <Text style={styles.timeAgoLeft}>Recipick 분석 완료</Text>
-              </View>
-
-              <View style={styles.recentRight}>
-                <Text style={styles.recentTitle} numberOfLines={2}>
-                  {r.title}
-                </Text>
-
-                <View style={styles.channelRow2}>
-                  <Thumb style={styles.channelAvatar} uri={undefined} borderRadius={999} />
-                  <Text style={styles.channelName} numberOfLines={1}>
-                    {r.channelName}
+        {recentRecipes.length === 0 && !homeFeedLoading ? (
+          <Text style={styles.emptyText}>최근 레시피가 아직 없어.</Text>
+        ) : (
+          recentRecipes.map((r, idx) => (
+            <TouchableOpacity
+              key={r.id}
+              activeOpacity={0.92}
+              style={[styles.recentCard, idx > 0 && { marginTop: s(12) }]}
+              onPress={() => goToRecipeDetail(r)}
+            >
+              <View style={styles.recentInner}>
+                <View style={styles.recentLeft}>
+                  <Thumb style={styles.recentThumb} uri={r.thumbUrl} borderRadius={s(13.5)} />
+                  <Text style={styles.timeAgoLeft}>
+                    {r.savedAt ? '최근 저장한 레시피' : 'Recipick 분석 완료'}
                   </Text>
                 </View>
 
-                <View style={styles.metaRow}>
-                  <Meta icon="heart-outline" text={r.likeCount || '0'} />
-                  <Meta icon="chatbubble-outline" text={r.commentCount || '0'} />
-                  <Meta icon="share-social-outline" text={r.shareCount || '0'} />
-                  <Text style={styles.priceText}>{r.totalEstimatedPrice || ''}</Text>
-                </View>
+                <View style={styles.recentRight}>
+                  <Text style={styles.recentTitle} numberOfLines={2}>
+                    {r.title}
+                  </Text>
 
-                <Text style={styles.userTag}>Recipick 유저</Text>
+                  <View style={styles.channelRow2}>
+                    <Thumb style={styles.channelAvatar} uri={undefined} borderRadius={999} />
+                    <Text style={styles.channelName} numberOfLines={1}>
+                      {r.channelName}
+                    </Text>
+                  </View>
+
+                  <View style={styles.metaRow}>
+                    <Meta icon="heart-outline" text={r.likeCount || '0'} />
+                    <Meta icon="chatbubble-outline" text={r.commentCount || '0'} />
+                    <Meta icon="share-social-outline" text={r.shareCount || '0'} />
+                    <Text style={styles.priceText}>{r.totalEstimatedPrice || ''}</Text>
+                  </View>
+
+                  <Text style={styles.userTag}>Recipick 유저</Text>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          ))
+        )}
       </View>
 
       <View style={{ height: s(40) }} />
@@ -1037,5 +1170,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#2F3F3E',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  emptyText: {
+    paddingLeft: s(28),
+    fontSize: s(12),
+    fontWeight: '700',
+    color: SECTION,
+    opacity: 0.7,
   },
 });

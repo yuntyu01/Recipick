@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dimensions,
     Image,
@@ -11,8 +11,12 @@ import {
     View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { analyzeRecipe, waitRecipeCompleted } from '../lib/api';
-import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from '../lib/youtube';
+import {
+    getRecipe,
+    getRecommendationsByCategory,
+    normalizeRecommendations,
+    type RecommendationItem,
+} from '../lib/api';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -38,134 +42,59 @@ type CategoryRecipeItem = {
     commentCount?: string;
     shareCount?: string;
     totalEstimatedPrice?: string;
-    recipeData?: any;
 };
 
-type SeedRecipe = {
-    id: string;
-    url: string;
-};
-
-/* 
-  여기 seed URL은 카테고리별 실제 유튜브 링크로 바꿔주면 됨
-  지금은 구조 연결용 예시
-*/
-const CATEGORY_SEEDS: Record<string, SeedRecipe[]> = {
-    한식: [
-        { id: 'k-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'k-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'k-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'k-4', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'k-5', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-    중식: [
-        { id: 'c-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'c-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'c-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-    일식: [
-        { id: 'j-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'j-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'j-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-    양식: [
-        { id: 'w-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'w-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'w-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-    분식: [
-        { id: 's-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 's-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 's-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-    디저트: [
-        { id: 'd-1', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'd-2', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-        { id: 'd-3', url: 'https://www.youtube.com/watch?v=H91MHZVoPn0' },
-    ],
-};
-
-function formatWon(value: any) {
-    if (value === undefined || value === null || value === '') return '';
-    const num = Number(value);
-    if (Number.isNaN(num)) return `${value}원`;
-    return `${num.toLocaleString('ko-KR')}원`;
+function mapRecommendationToCategoryItem(item: RecommendationItem): CategoryRecipeItem {
+    return {
+        id: `category-${item.video_id}`,
+        videoId: item.video_id,
+        url: item.url || `https://www.youtube.com/watch?v=${item.video_id}`,
+        title: item.title || '제목 없음',
+        channelName: item.channel_name || '채널명 없음',
+        thumbUrl: item.thumbnail_url || '',
+        likeCount: '0',
+        commentCount: '0',
+        shareCount: '0',
+        totalEstimatedPrice: '',
+    };
 }
 
 export default function CategoryPage() {
-    const { name } = useLocalSearchParams();
+    const params = useLocalSearchParams();
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    const categoryName = String(name ?? '');
+    const categoryName = String(params.name ?? params.category ?? '').trim();
 
     const [items, setItems] = useState<CategoryRecipeItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-
-    const seeds = useMemo(() => {
-        return CATEGORY_SEEDS[categoryName] ?? [];
-    }, [categoryName]);
-
-    const analyzeSeedRecipe = async (seed: SeedRecipe): Promise<CategoryRecipeItem | null> => {
-        try {
-            const videoId = extractYouTubeVideoId(seed.url);
-            if (!videoId) return null;
-
-            const meta = await buildYoutubeMetaFromUrl(seed.url).catch(() => null);
-
-            const safeTitle = meta?.title?.trim() || '제목 없음';
-            const safeChannelName = meta?.channel_name?.trim() || '채널명 없음';
-
-            const requestBody = {
-                video_id: videoId,
-                original_url: `https://www.youtube.com/watch?v=${videoId}`,
-                sharer_nickname: '익명',
-                title: safeTitle,
-                channel_name: safeChannelName,
-            };
-
-            const first = await analyzeRecipe(requestBody);
-
-            const finalRes =
-                first.status === 'PROCESSING'
-                    ? await waitRecipeCompleted(first.video_id, {
-                        intervalMs: 1500,
-                        timeoutMs: 180000,
-                    })
-                    : first;
-
-            if (finalRes.status !== 'COMPLETED' || !finalRes.data) return null;
-
-            return {
-                id: seed.id,
-                videoId: finalRes.video_id,
-                url: seed.url,
-                title: finalRes.title || safeTitle,
-                channelName: finalRes.channel_name || safeChannelName,
-                thumbUrl: finalRes.thumbnail_url || meta?.thumbnail_url || '',
-                likeCount: String(finalRes.data.like_count ?? '0'),
-                commentCount: String(finalRes.data.comment_count ?? '0'),
-                shareCount: String(finalRes.data.share_count ?? '0'),
-                totalEstimatedPrice: formatWon(finalRes.data.total_estimated_price),
-                recipeData: finalRes.data,
-            };
-        } catch (e) {
-            console.log('[CATEGORY analyzeSeedRecipe error]', seed.url, e);
-            return null;
-        }
-    };
 
     const loadCategoryFeed = async () => {
         try {
+            if (!categoryName) {
+                setItems([]);
+                setError('카테고리 정보가 없어요.');
+                return;
+            }
+
             setLoading(true);
             setError(null);
 
-            const results = await Promise.all(seeds.map(analyzeSeedRecipe));
-            setItems(results.filter(Boolean) as CategoryRecipeItem[]);
-        } catch (e) {
+            const res = await getRecommendationsByCategory(categoryName);
+            const list = normalizeRecommendations(res);
+
+            console.log('[CATEGORY NAME]', categoryName);
+            console.log('[CATEGORY API RAW]', res);
+            console.log('[CATEGORY API LIST]', list);
+
+            const mapped = list.map(mapRecommendationToCategoryItem);
+            setItems(mapped);
+        } catch (e: any) {
             console.log('[CATEGORY loadCategoryFeed error]', e);
-            setError('카테고리 레시피를 불러오지 못했어요.');
+            setItems([]);
+            setError(e?.message || '카테고리 레시피를 불러오지 못했어요.');
         } finally {
             setLoading(false);
         }
@@ -175,19 +104,41 @@ export default function CategoryPage() {
         loadCategoryFeed();
     }, [categoryName]);
 
-    const goToRecipeDetail = (item: CategoryRecipeItem) => {
-        router.push({
-            pathname: '/create-link',
-            params: {
-                link: item.url,
-                url: item.url,
-                video_id: item.videoId,
-                title: item.title,
-                channel_name: item.channelName,
-                thumbnail_url: item.thumbUrl || '',
-                recipe_data: JSON.stringify(item.recipeData ?? null),
-            },
-        });
+    const goToRecipeDetail = async (item: CategoryRecipeItem) => {
+        try {
+            if (!item.videoId) {
+                setError('레시피 정보를 찾을 수 없어요.');
+                return;
+            }
+
+            setDetailLoadingId(item.id);
+            setError(null);
+
+            const detail = await getRecipe(item.videoId);
+
+            if (detail.status !== 'COMPLETED' || !detail.data) {
+                setError('이 추천 영상은 아직 분석된 레시피가 없어요.');
+                return;
+            }
+
+            router.push({
+                pathname: '/create-link',
+                params: {
+                    link: item.url,
+                    url: item.url,
+                    video_id: detail.video_id,
+                    title: detail.title || item.title,
+                    channel_name: detail.channel_name || item.channelName,
+                    thumbnail_url: detail.thumbnail_url || item.thumbUrl || '',
+                    recipe_data: JSON.stringify(detail.data ?? null),
+                },
+            });
+        } catch (e: any) {
+            console.log('[CATEGORY DETAIL LOAD ERROR]', e);
+            setError(e?.message || '레시피 상세 정보를 불러오는 중 오류가 났어요.');
+        } finally {
+            setDetailLoadingId(null);
+        }
     };
 
     return (
@@ -198,17 +149,20 @@ export default function CategoryPage() {
         >
             <View style={styles.header}>
                 <TouchableOpacity
-                    onPress={() => router.replace('/home')}
+                    onPress={() => router.back()}
                     style={styles.backBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                     <Ionicons name="arrow-back" size={22} color={TITLE} />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle}>{categoryName}</Text>
+                <Text style={styles.headerTitle}>{categoryName || '카테고리'}</Text>
             </View>
 
             {loading && <Text style={styles.infoText}>카테고리 레시피 불러오는 중...</Text>}
+            {!!detailLoadingId && (
+                <Text style={styles.infoText}>레시피 상세 정보 불러오는 중...</Text>
+            )}
             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
             <View style={styles.recentBox}>

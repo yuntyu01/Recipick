@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import * as SecureStore from "expo-secure-store";
 import { Stack, useRouter } from "expo-router";
 import {
     Dimensions,
@@ -8,20 +9,25 @@ import {
     Text,
     TouchableOpacity,
     View,
+    NativeSyntheticEvent,
+    NativeScrollEvent,
 } from "react-native";
-import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
 const { width: W, height: H } = Dimensions.get("window");
 
 const GREEN = "#54CDA4";
-const CARD = "#FFFFFF";
-const TEXT_DARK = "#0F172A";
+const CARD = "#F4F4F4";
+const TEXT_DARK = "#243B3A";
+const TEXT_MUTED = "#6B7B7A";
+const DOT_OFF = "rgba(36,59,58,0.22)";
+const GOOGLE_BTN_BG = "#FFFFFF";
+const GOOGLE_BTN_BORDER = "#E6EBEA";
 
-/* ✅ 이미지 연결 */
 const slides = [
     {
-        title: "Recipick과 함께\n요리할 준비 되셨나요?",
+        title: "Recipick!과 함께\n요리할 준비 되셨나요?",
         image: require("../assets/images/categories/onboarding1.png"),
     },
     {
@@ -37,30 +43,36 @@ export default function Onboarding() {
     const ref = useRef<ScrollView>(null);
 
     const [page, setPage] = useState(0);
+    const [loading, setLoading] = useState(false);
+
     const isLast = page === slides.length - 1;
 
-    const completeOnboarding = async () => {
-        // ✅ 다음부터 온보딩 안 뜨게
-        await SecureStore.setItemAsync("hasOnboarded", "1");
-
-        // ✅ 로그인/홈 분기
-        const token = await SecureStore.getItemAsync("accessToken");
-        router.replace(token ? "/home" : "/login");
-    };
-
     const goNext = async () => {
+        if (loading) return;
+
         if (!isLast) {
             const next = page + 1;
-            ref.current?.scrollTo({ x: next * W, animated: true }); // ✅ 버튼으로도 스와이프처럼 이동
-            setPage(next); // ✅ 상태도 즉시 반영
+            ref.current?.scrollTo({ x: next * W, animated: true });
+            setPage(next);
             return;
         }
-        await completeOnboarding();
+
+        try {
+            setLoading(true);
+            await SecureStore.setItemAsync("hasOnboarded", "true");
+            router.replace("/login");
+        } catch (e) {
+            console.log("[ONBOARDING SAVE ERROR]", e);
+            router.replace("/login");
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const onScrollEnd = (x: number) => {
-        const p = Math.round(x / W);
-        setPage(p);
+    const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        const x = e.nativeEvent.contentOffset.x;
+        const nextPage = Math.round(x / W);
+        setPage(nextPage);
     };
 
     return (
@@ -72,34 +84,73 @@ export default function Onboarding() {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={(e) => onScrollEnd(e.nativeEvent.contentOffset.x)}
+                bounces={false}
+                onMomentumScrollEnd={onScrollEnd}
             >
                 {slides.map((s: any, idx) => (
                     <View key={idx} style={[styles.slide, { width: W }]}>
-                        {/* 제목 */}
                         <Text style={styles.title}>{s.title}</Text>
 
-                        {/* 카드 */}
                         <View style={styles.card}>
-                            {/* 1페이지 */}
                             {idx === 0 && (
-                                <Image source={s.image} style={styles.image} resizeMode="contain" />
-                            )}
-
-                            {/* 2페이지 손 2개 */}
-                            {idx === 1 && (
-                                <View style={styles.handWrap}>
-                                    <Image source={s.image1} style={styles.hand} resizeMode="contain" />
-                                    <Image source={s.image2} style={styles.hand} resizeMode="contain" />
+                                <View style={styles.illustrationWrap}>
+                                    <View style={styles.circleBg} />
+                                    <Image source={s.image} style={styles.panImage} resizeMode="contain" />
                                 </View>
                             )}
 
-                            {/* ✅ 버튼 텍스트 변경 */}
-                            <TouchableOpacity activeOpacity={0.9} onPress={goNext} style={styles.ctaBtn}>
-                                <Text style={styles.ctaText}>{isLast ? "Start Cooking" : "Next"}</Text>
-                            </TouchableOpacity>
+                            {idx === 1 && (
+                                <View style={styles.illustrationWrap}>
+                                    <View style={styles.circleBg} />
 
-                            {/* dots */}
+                                    <View style={styles.handStage}>
+                                        <Image
+                                            source={s.image1}
+                                            style={styles.handTop}
+                                            resizeMode="contain"
+                                        />
+                                        <Image
+                                            source={s.image2}
+                                            style={styles.handBottom}
+                                            resizeMode="contain"
+                                        />
+                                    </View>
+                                </View>
+                            )}
+
+                            {!isLast ? (
+                                <TouchableOpacity
+                                    activeOpacity={0.85}
+                                    onPress={goNext}
+                                    style={styles.nextBtn}
+                                >
+                                    <Text style={styles.nextBtnLabel}>Next</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.lastActionWrap}>
+                                    <TouchableOpacity
+                                        activeOpacity={0.9}
+                                        onPress={goNext}
+                                        style={[styles.googleBtn, loading && { opacity: 0.7 }]}
+                                        disabled={loading}
+                                    >
+                                        <Ionicons
+                                            name="logo-google"
+                                            size={22}
+                                            color={TEXT_DARK}
+                                            style={styles.googleIcon}
+                                        />
+                                        <Text style={styles.googleBtnText}>
+                                            {loading ? "이동 중..." : "구글로 시작하기"}
+                                        </Text>
+                                    </TouchableOpacity>
+
+                                    <Text style={styles.googleHelperText}>
+                                        로그인 후 내 레시피와 기록을 이어서 관리할 수 있어요
+                                    </Text>
+                                </View>
+                            )}
+
                             <View style={styles.dots}>
                                 {slides.map((_, i) => (
                                     <View
@@ -113,70 +164,160 @@ export default function Onboarding() {
                 ))}
             </ScrollView>
 
-            <View style={{ height: Math.max(16, insets.bottom) }} />
+            <View style={{ height: Math.max(12, insets.bottom) }} />
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    screen: { flex: 1, backgroundColor: GREEN },
+    screen: {
+        flex: 1,
+        backgroundColor: GREEN,
+    },
 
-    slide: { alignItems: "center" },
+    slide: {
+        alignItems: "center",
+    },
 
     title: {
-        marginTop: H * 0.1,
+        marginTop: H * 0.065,
         textAlign: "center",
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: "900",
         color: TEXT_DARK,
-        lineHeight: 26,
+        lineHeight: 25,
     },
 
     card: {
-        marginTop: H * 0.06,
-        width: W * 0.88,
-        flex: 1,
+        marginTop: H * 0.055,
+        width: W * 0.86,
+        height: H * 0.57,
+        borderRadius: 38,
         backgroundColor: CARD,
-        borderRadius: 34,
+        alignItems: "center",
+        paddingTop: H * 0.09,
+    },
+
+    illustrationWrap: {
+        width: W * 0.5,
+        height: W * 0.5,
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 20,
+        position: "relative",
     },
 
-    image: {
-        width: W * 0.55,
-        height: W * 0.55,
-        marginBottom: 18,
+    circleBg: {
+        position: "absolute",
+        width: W * 0.4,
+        height: W * 0.4,
+        borderRadius: (W * 0.4) / 2,
+        backgroundColor: "#DCEFDF",
     },
 
-    handWrap: {
-        flexDirection: "row",
-        gap: 20,
-        marginBottom: 18,
-    },
-    hand: {
-        width: W * 0.28,
-        height: W * 0.28,
+    panImage: {
+        width: W * 0.36,
+        height: W * 0.36,
     },
 
-    /* ✅ CTA 버튼: 마지막에 Start Cooking 느낌 살짝 */
-    ctaBtn: {
-        paddingVertical: 10,
-        paddingHorizontal: 22,
-        borderRadius: 22,
+    handStage: {
+        width: W * 0.4,
+        height: W * 0.4,
+        position: "relative",
     },
-    ctaText: {
+
+    handTop: {
+        position: "absolute",
+        width: W * 0.22,
+        height: W * 0.22,
+        left: W * 0.02,
+        top: W * 0.005,
+        transform: [{ rotate: "-14deg" }],
+    },
+
+    handBottom: {
+        position: "absolute",
+        width: W * 0.24,
+        height: W * 0.24,
+        right: W * 0.005,
+        bottom: 0,
+        transform: [{ rotate: "11deg" }],
+    },
+
+    nextBtn: {
+        marginTop: H * 0.05,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+    },
+
+    nextBtnLabel: {
         fontSize: 18,
         fontWeight: "900",
         color: TEXT_DARK,
+    },
+
+    lastActionWrap: {
+        width: "100%",
+        alignItems: "center",
+        marginTop: H * 0.04,
+        paddingHorizontal: 24,
+    },
+
+    googleBtn: {
+        width: "100%",
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: GOOGLE_BTN_BG,
+        borderWidth: 1,
+        borderColor: GOOGLE_BTN_BORDER,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 3,
+        position: "relative",
+    },
+
+    googleIcon: {
+        position: "absolute",
+        left: 18,
+    },
+
+    googleBtnText: {
+        fontSize: 18,
+        fontWeight: "900",
+        color: TEXT_DARK,
+    },
+
+    googleHelperText: {
+        marginTop: 10,
+        fontSize: 12,
+        lineHeight: 18,
+        fontWeight: "700",
+        color: TEXT_MUTED,
+        textAlign: "center",
     },
 
     dots: {
         flexDirection: "row",
-        gap: 8,
-        marginTop: 10,
+        alignItems: "center",
+        gap: 10,
+        marginTop: 12,
     },
-    dot: { width: 8, height: 8, borderRadius: 4 },
-    dotOn: { backgroundColor: GREEN },
-    dotOff: { backgroundColor: "#000", opacity: 0.25 },
+
+    dot: {
+        width: 9,
+        height: 9,
+        borderRadius: 4.5,
+    },
+
+    dotOn: {
+        backgroundColor: GREEN,
+    },
+
+    dotOff: {
+        backgroundColor: DOT_OFF,
+    },
 });

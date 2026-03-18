@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getMeWithToken } from "./lib/api";
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -24,8 +25,52 @@ const AVATAR_BG = "#E9ECEF";
 export default function MyPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const [userName, setUserName] = useState("레시픽 유저");
+
+  const getAccessToken = async () => {
+    const token =
+      (await SecureStore.getItemAsync("accessToken")) ||
+      (await SecureStore.getItemAsync("access_token"));
+
+    if (!token) {
+      throw new Error("로그인 토큰이 없어요.");
+    }
+
+    return token;
+  };
+
+  const loadMe = useCallback(async () => {
+    try {
+      const token = await getAccessToken();
+      const me = await getMeWithToken(token);
+
+      const resolvedName =
+        me?.nickname ||
+        me?.name ||
+        me?.username ||
+        me?.user_name ||
+        "레시픽 유저";
+
+      setUserName(resolvedName);
+    } catch (e) {
+      console.log("[MYPAGE LOAD ME ERROR]", e);
+      setUserName("레시픽 유저");
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMe();
+    }, [loadMe])
+  );
+
   const handleLogout = async () => {
     await SecureStore.deleteItemAsync("accessToken");
+    await SecureStore.deleteItemAsync("access_token");
+    await SecureStore.deleteItemAsync("refreshToken");
+    await SecureStore.deleteItemAsync("refresh_token");
+
     router.replace("/login");
   };
 
@@ -33,10 +78,8 @@ export default function MyPage() {
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* ✅ 상단 안전영역 */}
       <View style={{ height: insets.top }} />
 
-      {/* ===== Header ===== */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => (router.canGoBack() ? router.back() : router.replace("/home"))}
@@ -48,22 +91,19 @@ export default function MyPage() {
         <Text style={styles.headerTitle}>마이페이지</Text>
       </View>
 
-      {/* Profile */}
       <View style={styles.profileWrap}>
         <View style={styles.avatar}>
           <Ionicons name="person" size={s(44)} color="#9AA0A6" />
         </View>
-        <Text style={styles.userName}>레시픽 유저</Text>
+        <Text style={styles.userName}>{userName}</Text>
       </View>
 
-      {/* ✅ Menu Card (문의/FAQ) */}
       <View style={styles.card}>
         <Row label="문의하기" onPress={() => router.push("/contact")} />
         <View style={styles.divider} />
         <Row label="FAQ" onPress={() => router.push("/faq")} />
       </View>
 
-      {/* ✅ Links (약관/로그아웃/탈퇴) */}
       <View style={styles.links}>
         <TouchableOpacity onPress={() => router.push("/terms")}>
           <Text style={styles.linkText}>약관 및 동의 항목</Text>
@@ -72,6 +112,7 @@ export default function MyPage() {
         <TouchableOpacity onPress={handleLogout}>
           <Text style={styles.linkText}>로그아웃</Text>
         </TouchableOpacity>
+
         <TouchableOpacity onPress={() => router.push("/withdraw")}>
           <Text style={styles.withdrawText}>회원탈퇴</Text>
         </TouchableOpacity>
@@ -133,7 +174,8 @@ const styles = StyleSheet.create({
   userName: { fontSize: s(16), fontWeight: "900", color: "#111" },
 
   card: {
-    marginHorizontal: s(18),
+    marginLeft: s(30),
+    marginRight: s(30),
     borderWidth: 1,
     borderColor: BORDER,
     borderRadius: s(12),
@@ -142,7 +184,8 @@ const styles = StyleSheet.create({
   },
   row: {
     height: s(52),
-    paddingHorizontal: s(14),
+    paddingLeft: s(30),
+    paddingRight: s(14),
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -151,7 +194,21 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: s(14), fontWeight: "700", color: "#2D2F33" },
   divider: { height: 1, backgroundColor: DIVIDER },
 
-  links: { marginTop: s(16), paddingHorizontal: s(18), gap: s(10) },
-  linkText: { fontSize: s(12), fontWeight: "600", color: MUTED },
-  withdrawText: { fontSize: s(12), fontWeight: "700", color: DANGER },
+  links: {
+    marginTop: s(16),
+    paddingLeft: s(41),
+    paddingRight: s(18),
+    gap: s(10),
+  },
+  linkText: {
+    fontSize: s(15),
+    fontWeight: "600",
+    color: MUTED,
+  },
+
+  withdrawText: {
+    fontSize: s(15),
+    fontWeight: "700",
+    color: DANGER,
+  },
 });
