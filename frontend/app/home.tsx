@@ -20,19 +20,20 @@ import {
   type RecipeData,
   type UserHistoryItem,
   type UserHistoryRecipeData,
-} from './lib/api';
-import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from './lib/youtube';
+} from '../lib/api';
+import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from '../lib/youtube';
 import {
   Dimensions,
   FlatList,
   Image,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -193,7 +194,8 @@ export default function Home() {
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
 
-  const [userId, setUserId] = useState<string>('');
+  // string 또는 null이 모두 가능하다고 정의합니다.
+  const [userId, setUserId] = useState<string | null>(null);
   const [myRecipes, setMyRecipes] = useState<HomeRecipeItem[]>([]);
   const [recommendRecipes, setRecommendRecipes] = useState<HomeRecipeItem[]>([]);
   const [recentRecipes, setRecentRecipes] = useState<HomeRecipeItem[]>([]);
@@ -211,22 +213,33 @@ export default function Home() {
   const topAreaHeight = ctaTop + s(FIGMA_CTA_H) + s(16);
 
   const getAccessToken = async () => {
-    const token =
+  let token = null;
+
+  if (Platform.OS === 'web') {
+    token = localStorage.getItem('accessToken') || localStorage.getItem('access_token');
+  } else {
+    token =
       (await SecureStore.getItemAsync('accessToken')) ||
       (await SecureStore.getItemAsync('access_token'));
+  }
 
-    if (!token) {
-      throw new Error('로그인 토큰이 없어요.');
-    }
-
-    return token;
-  };
+  // 💡 수정: 에러를 던지지 않고 null을 반환합니다. 
+  // 그래야 로그인이 안 된 사용자도 홈 화면을 볼 수 있습니다.
+  return token || null; 
+};;
 
   const getCurrentUserId = async () => {
+  try {
     const token = await getAccessToken();
+    if (!token) return null; // 토큰 없으면 바로 null 반환
+
     const me = await getMeWithToken(token);
     return getUserIdFromMe(me);
-  };
+  } catch (e) {
+    console.log("[HOME AUTH ERROR]", e);
+    return null;
+  }
+};
 
   const handleLinkChange = (text: string) => {
     setLink(text);
@@ -359,9 +372,17 @@ export default function Home() {
       let currentUserId = resolvedUserId || userId;
 
       if (!currentUserId) {
-        currentUserId = await getCurrentUserId();
-        setUserId(currentUserId);
+        const fetchedId = await getCurrentUserId();
+        if (fetchedId) {
+          setUserId(fetchedId);
+          currentUserId = fetchedId;
+        } else {
+    
+          setUserId(null); 
+          currentUserId = null;
+        }
       }
+      
 
       const recommendCategory: RecipeCategory = '한식';
 
@@ -402,17 +423,26 @@ export default function Home() {
 
     const init = async () => {
       try {
-        const resolvedUserId = await getCurrentUserId();
+        // 1. 타입을 string | null로 명시해서 변수를 생성합니다.
+        const resolvedUserId: string | null = await getCurrentUserId().catch(() => null);
 
         if (!mounted) return;
 
+        // 2. 상태 업데이트
         setUserId(resolvedUserId);
-        await loadHomeFeed(resolvedUserId);
+        
+        // 3. null일 경우 undefined를 넘겨서 loadHomeFeed의 타입 에러를 방지합니다.
+        await loadHomeFeed(resolvedUserId || undefined);
       } catch (e: any) {
         console.log('[HOME INIT ERROR]', e);
         if (!mounted) return;
         setHomeFeedError(e?.message || '사용자 정보를 불러오지 못했어요.');
-        await loadHomeFeed('');
+        await loadHomeFeed();
+      } finally {
+        // 4. [핵심] 여기서 setIsLoading을 호출하면 65라인의 상태와 정확히 연결됩니다.
+        if (mounted) {
+          setHomeFeedLoading(false);
+        }
       }
     };
 
@@ -447,8 +477,14 @@ export default function Home() {
       let resolvedUserId = userId;
 
       if (!resolvedUserId) {
-        resolvedUserId = await getCurrentUserId();
-        setUserId(resolvedUserId);
+        try {
+          resolvedUserId = await getCurrentUserId();
+          setUserId(resolvedUserId);
+        } catch (e) {
+          // 토큰이 없어도 에러를 던지지 않고 null로 둡니다.
+          let resolvedUserId = null; 
+          console.log('비로그인 상태로 분석을 진행합니다.');
+        }
       }
 
       const safeTitle = videoMeta?.title?.trim() || '제목 없음';
@@ -511,7 +547,7 @@ export default function Home() {
       setLink('');
       setVideoMeta(null);
 
-      await loadHomeFeed(resolvedUserId);
+      await loadHomeFeed(resolvedUserId!);
     } catch (e: any) {
       console.error('[HANDLE DONE ERROR]', e);
       setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
@@ -656,18 +692,24 @@ export default function Home() {
       <FlatList
         horizontal
         data={CATEGORIES}
-        keyExtractor={(item) => String(item.key)}
+        // 수정 포인트: item.key가 없어도 index(순서)를 사용해 고유한 이름표를 만듭니다.
+        keyExtractor={(item, index) => 
+          item.key ? `category-${item.key}` : `category-fallback-${index}`
+        }
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.categoryList}
         ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <TouchableOpacity
             activeOpacity={0.85}
             style={styles.categoryItem}
-            onPress={() => router.push(`/category/${encodeURIComponent(String(item.key))}`)}
+            // item.key가 없을 때를 대비해 안전하게 문자열로 변환합니다.
+            onPress={() => 
+              router.push(`/category/${encodeURIComponent(String(item.key || index))}`)
+            }
           >
             <Image source={item.icon} style={styles.categoryImg} resizeMode="contain" />
-            <Text style={styles.categoryText}>{item.key}</Text>
+            <Text style={styles.categoryText}>{item.key || '미지정'}</Text>
           </TouchableOpacity>
         )}
       />
@@ -698,14 +740,17 @@ export default function Home() {
       <FlatList
         horizontal
         data={recommendRecipes}
-        keyExtractor={(item) => item.id}
+        // id가 있든 없든, 그냥 순서(index)를 이름표로 써서 절대로 안 겹치게 만듭니다.
+        keyExtractor={(_, index) => `recommend-item-${index}`}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingLeft: H_LIST_LEFT, paddingRight: s(18) }}
         ItemSeparatorComponent={() => <View style={{ width: H_LIST_GAP }} />}
         snapToInterval={H_CARD_W + H_LIST_GAP}
         decelerationRate="fast"
         ListEmptyComponent={
-          !homeFeedLoading ? <Text style={styles.emptyText}>추천 레시피가 아직 없어.</Text> : null
+          !homeFeedLoading ? (
+            <Text style={styles.emptyText}>추천 레시피가 아직 없어.</Text>
+          ) : null
         }
         renderItem={({ item }) => (
           <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />

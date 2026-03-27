@@ -22,7 +22,7 @@ import {
     type RecipeData,
     type UserHistoryItem,
     type UserHistoryRecipeData,
-} from './lib/api';
+} from '../lib/api';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;

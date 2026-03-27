@@ -4,7 +4,7 @@ import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getMeWithToken } from "./lib/api";
+import { getMeWithToken } from "../lib/api";
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -25,40 +25,49 @@ const AVATAR_BG = "#E9ECEF";
 export default function MyPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
   const [userName, setUserName] = useState("레시픽 유저");
 
-  const getAccessToken = async () => {
-    const token =
-      (await SecureStore.getItemAsync("accessToken")) ||
-      (await SecureStore.getItemAsync("access_token"));
-
-    if (!token) {
-      throw new Error("로그인 토큰이 없어요.");
+  // 1. getAccessToken 수정 (에러를 던지지 않고 null 반환)
+  const getAccessToken = async (): Promise<string | null> => {
+    try {
+      const token =
+        (await SecureStore.getItemAsync("accessToken")) ||
+        (await SecureStore.getItemAsync("access_token"));
+      return token || null; 
+    } catch (e) {
+      return null;
     }
-
-    return token;
   };
 
+  // 2. loadMe 수정 (토큰 없으면 로그인 페이지로 리다이렉트)
   const loadMe = useCallback(async () => {
     try {
       const token = await getAccessToken();
+
+      // 💡 토큰이 없으면 로그인 화면으로 보냅니다.
+      if (!token) {
+        console.log("[MYPAGE] 토큰이 없어 로그인 페이지로 이동합니다.");
+        router.replace("/login");
+        return;
+      }
+
       const me = await getMeWithToken(token);
 
+      // 백엔드(auth_router.py) 구조에 맞춰 nickname을 우선적으로 가져옵니다.
       const resolvedName =
         me?.nickname ||
         me?.name ||
-        me?.username ||
-        me?.user_name ||
         "레시픽 유저";
 
       setUserName(resolvedName);
     } catch (e) {
       console.log("[MYPAGE LOAD ME ERROR]", e);
-      setUserName("레시픽 유저");
+      // 에러가 나도(토큰 만료 등) 안전하게 로그인 페이지로 보냅니다.
+      router.replace("/login");
     }
-  }, []);
+  }, [router]);
 
+  // 화면이 포커스될 때마다 실행
   useFocusEffect(
     useCallback(() => {
       loadMe();

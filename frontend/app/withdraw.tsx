@@ -10,7 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { deleteMe } from "./lib/api";
+import { deleteMe } from "../lib/api";
 
 export default function Withdraw() {
   const router = useRouter();

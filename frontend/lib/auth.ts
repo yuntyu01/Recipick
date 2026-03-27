@@ -18,6 +18,7 @@ export function useGoogleAuthRequest() {
     scopes: ['profile', 'email'],
     redirectUri: makeRedirectUri({
       scheme: 'recipick',
+      native: 'com.teamrecipick.recipick:/oauth2redirect/google',
     }),
   });
 
@@ -55,3 +56,4 @@ export async function loginToBackendWithFirebase() {
     });
   }
 }
+

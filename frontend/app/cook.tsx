@@ -20,6 +20,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
 
+import YoutubePlayer from "react-native-youtube-iframe";
+
 const BRAND = '#54CDA4';
 const BG = '#F3F6F6';
 const WHITE = '#FFFFFF';
@@ -157,8 +159,8 @@ export default function CookScreen() {
         seekTo(targetStep.startSec);
 
         if ((targetStep.timerSec ?? 0) > 0) {
-            setManualTimerSec(targetStep.timerSec);
-            setRemainingSec(targetStep.timerSec);
+            setManualTimerSec(targetStep.timerSec ?? 0);
+            setRemainingSec(targetStep.timerSec ?? 0);
             timerFinishedHandledRef.current = false;
             setAlarmOpen(false);
             Vibration.cancel();
@@ -449,55 +451,44 @@ export default function CookScreen() {
                 <View style={[styles.videoWrap, { width: VIDEO_W, height: VIDEO_H }]}>
                     {videoId ? (
                         <>
-                            <WebView
-                                ref={webRef}
-                                key={`${videoId}-${playerStartSec}-${isPlaying ? 'play' : 'pause'}`}
-                                source={{
-                                    uri: embedUrl,
-                                    headers: {
-                                        Referer: 'https://www.youtube.com/',
-                                    },
-                                }}
-                                originWhitelist={['*']}
-                                style={{ width: '100%', height: '100%', backgroundColor: 'black' }}
-                                javaScriptEnabled
-                                domStorageEnabled
-                                allowsInlineMediaPlayback
-                                mediaPlaybackRequiresUserAction={false}
-                                allowsFullscreenVideo
-                                mixedContentMode="always"
-                                thirdPartyCookiesEnabled
-                                sharedCookiesEnabled
-                                setSupportMultipleWindows={false}
-                                onLoadEnd={() => {
-                                    setVideoError(false);
-                                }}
-                                onError={(syntheticEvent) => {
-                                    console.log('[WEBVIEW ERROR]', syntheticEvent.nativeEvent);
-                                    setVideoError(true);
-                                }}
-                                onHttpError={(syntheticEvent) => {
-                                    console.log('[WEBVIEW HTTP ERROR]', syntheticEvent.nativeEvent);
-                                    setVideoError(true);
-                                }}
-                            />
+                            <YoutubePlayer
+    height={VIDEO_H}
+    play={isPlaying}
+    videoId={videoId}
+    onChangeState={(state : string) => {
+        if (state === "ended") setIsPlaying(false);
+        if (state === "playing") setIsPlaying(true);
+        if (state === "paused") setIsPlaying(false);
+    }}
+    // 💡 안드로이드 재생 차단을 피하기 위한 마법의 설정
+    webViewProps={{
+        androidLayerType: "hardware",
+        allowsFullscreenVideo: true,
+        userAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+    }}
+    onReady={() => setVideoError(false)}
+    onError={(e : any) => {
+        console.log('[YOUTUBE ERROR]', e);
+        setVideoError(true);
+    }}
+/>
 
-                            {videoError && (
-                                <View style={styles.videoErrorOverlay}>
-                                    <Text style={styles.videoErrorTitle}>앱 안에서 영상 재생이 막혔어요</Text>
-                                    <Text style={styles.videoErrorSub}>
-                                        유튜브 정책 때문에 WebView 재생이 제한될 수 있어요.
-                                    </Text>
-
-                                    <TouchableOpacity
-                                        style={styles.videoErrorBtn}
-                                        onPress={openYoutubeExternally}
-                                        activeOpacity={0.9}
-                                    >
-                                        <Text style={styles.videoErrorBtnText}>유튜브에서 열기</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            )}
+{/* 에러가 났을 때만 보여주는 안내 화면 */}
+{videoError && (
+    <View style={styles.videoErrorOverlay}>
+        <Text style={styles.videoErrorTitle}>영상을 불러올 수 없어요</Text>
+        <Text style={styles.videoErrorSub}>
+            잠시 후 다시 시도하거나 유튜브에서 직접 열어보세요.
+        </Text>
+        <TouchableOpacity
+            style={styles.videoErrorBtn}
+            onPress={openYoutubeExternally}
+            activeOpacity={0.9}
+        >
+            <Text style={styles.videoErrorBtnText}>유튜브에서 열기</Text>
+        </TouchableOpacity>
+    </View>
+)}
                         </>
                     ) : (
                         <View style={styles.videoFallback}>

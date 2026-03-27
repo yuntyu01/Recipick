@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signInAnonymously } from "firebase/auth";
 
-import { auth } from "./lib/firebase";
+import { auth } from "../lib/firebase";
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;

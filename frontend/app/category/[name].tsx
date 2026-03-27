@@ -16,7 +16,7 @@ import {
     getRecommendationsByCategory,
     normalizeRecommendations,
     type RecommendationItem,
-} from '../lib/api';
+} from '../../lib/api';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -82,7 +82,8 @@ export default function CategoryPage() {
             setLoading(true);
             setError(null);
 
-            const res = await getRecommendationsByCategory(categoryName);
+            const res = await getRecommendationsByCategory('all');
+            console.log("서버에서 받은 전체 데이터:", res);
             const list = normalizeRecommendations(res);
 
             console.log('[CATEGORY NAME]', categoryName);
