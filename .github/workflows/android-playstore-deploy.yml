@@ -1,0 +1,108 @@
+name: "CD: Android Play Store"
+
+on:
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Console release track"
+        required: true
+        default: "alpha"
+        type: choice
+        options:
+          - alpha
+          - internal
+          - beta
+          - production
+      version_name:
+        description: "Optional versionName override"
+        required: false
+        type: string
+  push:
+    branches:
+      - stage
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-playstore-deploy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-android:
+    name: Build AAB and Upload to Play
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set release metadata
+        run: |
+          echo "ANDROID_KEYSTORE_PATH=$GITHUB_WORKSPACE/frontend/android/app/release-keystore.jks" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_CODE=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.version_name }}" ]; then
+            echo "ANDROID_VERSION_NAME=${{ github.event.inputs.version_name }}" >> "$GITHUB_ENV"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.track }}" ]; then
+            echo "PLAY_TRACK=${{ github.event.inputs.track }}" >> "$GITHUB_ENV"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "PLAY_TRACK=alpha" >> "$GITHUB_ENV"
+          elif [ "${{ github.ref }}" = "refs/heads/stage" ]; then
+            echo "PLAY_TRACK=internal" >> "$GITHUB_ENV"
+          else
+            echo "PLAY_TRACK=internal" >> "$GITHUB_ENV"
+          fi
+
+      - name: Restore Android keystore
+        run: printf '%s' '${{ secrets.KEYSTORE_BASE64 }}' | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+
+      - name: Grant execute permission for gradlew
+        working-directory: ./frontend/android
+        run: chmod +x gradlew
+
+      - name: Build release AAB
+        working-directory: ./frontend/android
+        run: |
+          VERSION_NAME_ARG=""
+          if [ -n "${ANDROID_VERSION_NAME}" ]; then
+            VERSION_NAME_ARG="-Pandroid.versionName=${ANDROID_VERSION_NAME}"
+          fi
+
+          ./gradlew bundleRelease \
+            -Pandroid.versionCode=${ANDROID_VERSION_CODE} \
+            ${VERSION_NAME_ARG}
+
+      - name: Upload AAB to Play Console
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.knut.recipick
+          releaseFiles: ./frontend/android/app/build/outputs/bundle/release/app-release.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: completed

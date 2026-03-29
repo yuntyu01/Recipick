@@ -1,0 +1,64 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-2
+  AWS_ACCOUNT_ID: "559198857556"
+  ECR_REPOSITORY: recipick
+  IMAGE_TAG_API: api-latest
+  IMAGE_TAG_WORKER: worker-latest
+  LAMBDA_MAIN: recipick-main-api
+  LAMBDA_WORKER: recipick-llm-worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push api image
+        run: |
+          set -e
+          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          docker build --platform linux/amd64 --provenance=false --target api -t ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_API} .
+          docker push ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_API}
+
+      - name: Build and push worker image
+        run: |
+          set -e
+          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          docker build --platform linux/amd64 --provenance=false --target worker -t ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_WORKER} .
+          docker push ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_WORKER}
+
+      - name: Update Lambda images
+        run: |
+          set -e
+          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          aws lambda update-function-code \
+            --function-name ${LAMBDA_MAIN} \
+            --image-uri ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_API} \
+            --no-cli-pager
+          aws lambda update-function-code \
+            --function-name ${LAMBDA_WORKER} \
+            --image-uri ${ECR_URI}/${ECR_REPOSITORY}:${IMAGE_TAG_WORKER} \
+            --no-cli-pager
