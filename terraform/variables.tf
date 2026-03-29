@@ -26,6 +26,16 @@ variable "gemini_api_key" {
   type        = string
   sensitive   = true 
 }
+variable "gemini_chat_model" {
+  description = "Gemini chat model name"
+  type        = string
+  default     = "gemini-3-flash-preview"
+}
+variable "ai_daily_limit" {
+  description = "Daily AI ask limit per user"
+  type        = number
+  default     = 5
+}
 variable "RAPIDAPI_KEY" {
   description = "RAPIDAPI_KEY"
   type        = string

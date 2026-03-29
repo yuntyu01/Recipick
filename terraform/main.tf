@@ -89,6 +89,11 @@ resource "aws_dynamodb_table" "recipes" {
 
     projection_type = "ALL"
   }
+
+  ttl {
+    attribute_name = "ttl_expire_at"
+    enabled        = true
+  }
 }
 
 resource "aws_s3_bucket" "static" {
@@ -230,6 +235,9 @@ resource "aws_lambda_function" "main_api" {
       S3_BUCKET_NAME      = aws_s3_bucket.static.bucket
       RAPIDAPI_KEY        = var.RAPIDAPI_KEY
       FIREBASE_SERVICE_ACCOUNT = var.firebase_json 
+      GEMINI_API_KEY      = var.gemini_api_key
+      GEMINI_CHAT_MODEL   = var.gemini_chat_model
+      AI_DAILY_LIMIT      = tostring(var.ai_daily_limit)
     }
   }
 }
