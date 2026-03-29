@@ -8,5 +8,8 @@ class Settings:
     S3_BUCKET_NAME: str = os.environ["S3_BUCKET_NAME"]
     RAPIDAPI_KEY: str = os.environ["RAPIDAPI_KEY"]
     FIREBASE_SERVICE_ACCOUNT: str = os.getenv("FIREBASE_SERVICE_ACCOUNT", "")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_CHAT_MODEL: str = os.getenv("GEMINI_CHAT_MODEL", "gemini-3-flash-preview")
+    AI_DAILY_LIMIT: int = int(os.getenv("AI_DAILY_LIMIT", "5"))
     
 settings = Settings()
