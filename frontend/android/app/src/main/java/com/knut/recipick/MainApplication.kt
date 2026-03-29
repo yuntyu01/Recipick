@@ -1,4 +1,4 @@
-package com.anonymous.recipick
+package com.knut.recipick
 
 import android.app.Application
 import android.content.res.Configuration

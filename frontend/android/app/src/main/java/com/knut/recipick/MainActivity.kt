@@ -1,4 +1,4 @@
-package com.anonymous.recipick
+package com.knut.recipick
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

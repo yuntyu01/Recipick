@@ -14,7 +14,7 @@
       "backgroundColor": "#54CDA4"
     },
     "ios": {
-      "bundleIdentifier": "com.anonymous.recipick",
+      "bundleIdentifier": "com.knut.recipick",
       "supportsTablet": true,
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -23,7 +23,7 @@
       }
     },
     "android": {
-      "package": "com.anonymous.recipick",
+      "package": "com.knut.recipick",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/recipick-logo.png",

@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>1035075506580-kmbkqr39j5f4e7bilcjr5ivpfrqvj0t9.apps.googleusercontent.com</string>
+	<string>1035075506580-59vgln601u0bgv1he6645rhof1nt31pe.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.1035075506580-kmbkqr39j5f4e7bilcjr5ivpfrqvj0t9</string>
+	<string>com.googleusercontent.apps.1035075506580-59vgln601u0bgv1he6645rhof1nt31pe</string>
 	<key>ANDROID_CLIENT_ID</key>
 	<string>1035075506580-3kof887vb36b6res4m0ejg9dn0dnep4j.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
@@ -15,7 +15,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.anonymous.recipick</string>
+	<string>com.knut.recipick</string>
 	<key>PROJECT_ID</key>
 	<string>recipick-auth</string>
 	<key>STORAGE_BUCKET</key>
@@ -31,6 +31,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:1035075506580:ios:b58087fa6c6e9863daff81</string>
+	<string>1:1035075506580:ios:d91fc91d99756227daff81</string>
 </dict>
 </plist>
