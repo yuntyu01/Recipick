@@ -114,10 +114,10 @@ android {
             def keystoreKeyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: project.findProperty("RELEASE_KEY_PASSWORD")
 
             if (keystorePath) {
-                storeFile file(keystorePath)
-                storePassword keystorePassword
-                keyAlias keystoreKeyAlias
-                keyPassword keystoreKeyPassword
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                keyAlias = keystoreKeyAlias
+                keyPassword = keystoreKeyPassword
             }
         }
     }
