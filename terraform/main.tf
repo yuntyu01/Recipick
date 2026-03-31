@@ -234,8 +234,7 @@ resource "aws_lambda_function" "main_api" {
       RECIPE_TABLE_NAME = aws_dynamodb_table.recipes.name
       SQS_QUEUE_URL       = aws_sqs_queue.recipe_queue.url
       S3_BUCKET_NAME      = aws_s3_bucket.static.bucket
-      RAPIDAPI_KEY        = var.RAPIDAPI_KEY
-      FIREBASE_SERVICE_ACCOUNT = var.firebase_json 
+      FIREBASE_SERVICE_ACCOUNT = var.firebase_json
       GEMINI_API_KEY      = var.gemini_api_key
       GEMINI_CHAT_MODEL   = var.gemini_chat_model
       AI_DAILY_LIMIT      = tostring(var.ai_daily_limit)
@@ -271,7 +270,6 @@ resource "aws_lambda_function" "llm_worker" {
       SQS_QUEUE_URL       = aws_sqs_queue.recipe_queue.url
       S3_BUCKET_NAME      = aws_s3_bucket.static.bucket
       GEMINI_API_KEY      = var.gemini_api_key
-      RAPIDAPI_KEY        = var.RAPIDAPI_KEY
     }
   }
 }
