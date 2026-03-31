@@ -136,7 +136,8 @@ resource "aws_iam_role_policy" "main_api_policy" {
           "dynamodb:Query", 
           "dynamodb:UpdateItem", 
           "dynamodb:DeleteItem",
-          "dynamodb:BatchWriteItem"
+          "dynamodb:BatchWriteItem",
+          "dynamodb:BatchGetItem"
         ]
         Resource = [
           aws_dynamodb_table.recipes.arn,
@@ -189,7 +190,7 @@ resource "aws_iam_role_policy" "llm_worker_policy" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:UpdateItem", "dynamodb:GetItem"] # 상태 업데이트 권한 필수
+        Action   = ["dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:PutItem"] # 상태 업데이트 권한 필수
         Resource = aws_dynamodb_table.recipes.arn
       },
       {

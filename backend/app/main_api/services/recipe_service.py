@@ -232,3 +232,27 @@ def get_recommended_videos_by_category(category: str, limit: int = 20):
         raise HTTPException(status_code=400, detail="지원하지 않는 카테고리입니다.")
     items = recipe_repo.list_recommended_videos_by_category(category=category, limit=limit)
     return replace_decimals(items)
+
+
+# 다중 재료 교집합 레시피 검색
+def search_recipes_by_ingredients(names: list[str]) -> list[dict]:
+    # 각 재료의 video_id 목록을 개별 GetItem으로 조회
+    video_sets = []
+    for name in names:
+        ids = recipe_repo.get_ingredient_index(name)
+        video_sets.append(set(ids))
+
+    if not video_sets:
+        return []
+
+    # set 교집합으로 모든 재료가 포함된 video_id만 남김
+    intersection = video_sets[0]
+    for s in video_sets[1:]:
+        intersection = intersection & s
+
+    if not intersection:
+        return []
+
+    # BatchGetItem으로 레시피 정보 일괄 조회
+    items = recipe_repo.batch_get_recipes_info(list(intersection))
+    return replace_decimals(items)

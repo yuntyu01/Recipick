@@ -61,3 +61,17 @@ class RecipeRecommendationResponse(BaseModel):
     thumbnail_url: str
     url: str
     category: str
+
+
+class IngredientCountResponse(BaseModel):
+    name: str
+    count: int
+
+
+class RecipeSearchResultResponse(BaseModel):
+    video_id: str
+    title: str
+    channel_name: str
+    thumbnail_url: str
+    url: str
+    category: str

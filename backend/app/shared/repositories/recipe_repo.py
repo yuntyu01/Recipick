@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from boto3.dynamodb.conditions import Key
 from app.shared.config import settings
 from botocore.exceptions import ClientError
-from typing import Optional
+from typing import Optional, List
 
 dynamodb = boto3.resource('dynamodb', region_name=settings.REGION)
 user_table = dynamodb.Table(settings.USER_TABLE)
@@ -389,6 +389,101 @@ def create_share(video_id: str, user_id: str):
     )
     return {"success": True, "created_at": now}
 
+
+# ─────────────────────────────────────────────────────────────
+# 냉장고 파먹기 (역색인 + 카운터)
+# ─────────────────────────────────────────────────────────────
+
+def _ensure_counter_item_exists():
+    """META#INGREDIENT_LIST COUNTER 아이템이 없으면 빈 counts 맵으로 초기화."""
+    try:
+        recipe_table.put_item(
+            Item={'PK': 'META#INGREDIENT_LIST', 'SK': 'COUNTER', 'counts': {}},
+            ConditionExpression="attribute_not_exists(PK)"
+        )
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') != 'ConditionalCheckFailedException':
+            raise
+
+
+def update_ingredient_index(video_id: str, normalized_names: List[str]):
+    """각 표준 재료명에 대해 ING#{name} INDEX 아이템의 videos 리스트에 video_id를 추가."""
+    for name in normalized_names:
+        recipe_table.update_item(
+            Key={'PK': f'ING#{name}', 'SK': 'INDEX'},
+            UpdateExpression="SET #vids = list_append(if_not_exists(#vids, :empty), :new_vid)",
+            ExpressionAttributeNames={"#vids": "videos"},
+            ExpressionAttributeValues={
+                ":new_vid": [video_id],
+                ":empty": []
+            }
+        )
+
+
+def update_ingredient_counter(normalized_names: List[str]):
+    """META#INGREDIENT_LIST COUNTER 아이템의 counts 맵에서 각 재료명의 카운트를 1 증가."""
+    _ensure_counter_item_exists()
+    for name in normalized_names:
+        recipe_table.update_item(
+            Key={'PK': 'META#INGREDIENT_LIST', 'SK': 'COUNTER'},
+            UpdateExpression="SET #counts.#name = if_not_exists(#counts.#name, :zero) + :inc",
+            ExpressionAttributeNames={"#counts": "counts", "#name": name},
+            ExpressionAttributeValues={":zero": 0, ":inc": 1}
+        )
+
+
+def get_ingredient_list() -> dict:
+    """META#INGREDIENT_LIST COUNTER에서 전체 재료 카운트 맵을 반환."""
+    response = recipe_table.get_item(
+        Key={'PK': 'META#INGREDIENT_LIST', 'SK': 'COUNTER'}
+    )
+    item = response.get('Item')
+    if not item:
+        return {}
+    return item.get('counts', {})
+
+
+def get_ingredient_index(name: str) -> List[str]:
+    """ING#{name} INDEX 아이템에서 해당 재료가 포함된 video_id 목록을 반환."""
+    response = recipe_table.get_item(
+        Key={'PK': f'ING#{name}', 'SK': 'INDEX'}
+    )
+    item = response.get('Item')
+    if not item:
+        return []
+    return item.get('videos', [])
+
+
+def batch_get_recipes_info(video_ids: List[str]) -> List[dict]:
+    """여러 video_id에 대해 BatchGetItem으로 INFO 아이템을 한 번에 조회."""
+    if not video_ids:
+        return []
+
+    table_name = recipe_table.name
+    keys = [{'PK': f'VIDEO#{vid}', 'SK': 'INFO'} for vid in video_ids]
+
+    response = dynamodb.batch_get_item(
+        RequestItems={table_name: {'Keys': keys}}
+    )
+    items = response.get('Responses', {}).get(table_name, [])
+
+    results = []
+    for item in items:
+        video_id = str(item.get('PK', '')).replace('VIDEO#', '')
+        results.append({
+            'video_id': video_id,
+            'title': item.get('title') or '',
+            'channel_name': item.get('channel_name') or '',
+            'thumbnail_url': item.get('thumbnail_url') or f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
+            'url': item.get('original_url') or f'https://www.youtube.com/watch?v={video_id}',
+            'category': item.get('category') or '',
+        })
+    return results
+
+
+# ─────────────────────────────────────────────────────────────
+# 카테고리 인덱스 기반 추천 레시피 조회
+# ─────────────────────────────────────────────────────────────
 
 # 카테고리 인덱스 기반 추천 레시피 조회
 def list_recommended_videos_by_category(category: str, limit: int = 20):

@@ -37,6 +37,10 @@ RECIPE_SCHEMA = {
         "type": "object",
         "properties": {
           "name": {"type": "string"},
+          "normalized_names": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
           "amount": {"type": "string"},
           "estimated_price": {"type": "number"},
           "alternatives": {
@@ -52,7 +56,7 @@ RECIPE_SCHEMA = {
             }
           }
         },
-        "required": ["name","amount","estimated_price","alternatives"]
+        "required": ["name","normalized_names","amount","estimated_price","alternatives"]
       }
     },
     "steps": {
@@ -98,7 +102,13 @@ def run_etl_pipeline(video_id: str, original_url: str):
     3. total_calorie: 모든 재료의 칼로리 총합을 계산하여 숫자로만 입력 (단위 제외).
     4. total_estimated_price: 모든 ingredients의 estimated_price 합계.
     5. nutrition_details: 해당 요리의 총 영양성분 추정치.
-    6. ingredients: 
+    6. ingredients:
+    - name: 영상에서 언급된 '원본 식재료 이름'을 그대로 작성해 (예: 꿀꿀이 앞다리살).
+    - normalized_names: 검색을 위해 '표준 명칭'을 배열 형태로 담아. 이때 대분류와 소분류가 명확히 나뉘는 식재료라면 두 가지를 모두 포함해.
+      (규칙 예시 1: '앞다리살' -> ["돼지고기", "돼지 앞다리살"])
+      (규칙 예시 2: '닭가슴살' -> ["닭고기", "닭가슴살"])
+      (규칙 예시 3: '맛소금' -> ["소금"])
+      # 주의사항: 소분류(부위) 명칭에는 반드시 어떤 고기인지(소, 돼지, 닭 등) 접두사를 붙여 고유하게 만들어야 해.
     - 각 재료의 예상 가격(estimated_price)을 포함할 것.
     - alternatives(대체재)가 있다면 이름, 양, 가격을 포함하고, 없으면 빈 배열([])로 처리.
     7. steps: 
@@ -118,7 +128,7 @@ def run_etl_pipeline(video_id: str, original_url: str):
     },
     "ingredients": [
         {
-        "name": "String", "amount": "String", "estimated_price": Number,
+        "name": "String", "normalized_names": ["String"], "amount": "String", "estimated_price": Number,
         "alternatives": [
             { "name": "String", "amount": "String", "estimated_price": Number }
         ]
@@ -159,6 +169,19 @@ def run_etl_pipeline(video_id: str, original_url: str):
         
         # 5. DB에 저장 및 상태를 COMPLETED로 변경
         recipe_repo.update_completed_recipe(video_id, extracted_data)
+
+        # 6. 역색인(냉장고 파먹기) 업데이트 - normalized_names 중복 제거 후 처리
+        all_normalized = set()
+        for ingredient in extracted_data.get("ingredients", []):
+            for name in ingredient.get("normalized_names", []):
+                if name:
+                    all_normalized.add(name)
+
+        if all_normalized:
+            recipe_repo.update_ingredient_index(video_id, list(all_normalized))
+            recipe_repo.update_ingredient_counter(list(all_normalized))
+            print(f"[INFO] 역색인 업데이트 완료: {all_normalized}")
+
         print(f"[SUCCESS] {video_id} 분석 및 DB 저장 완료")
 
     except json.JSONDecodeError as e:

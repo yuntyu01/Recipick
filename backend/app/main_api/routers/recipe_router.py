@@ -9,6 +9,7 @@ from app.main_api.schemas.recipe_schema import (
     RecipeCommentDeleteRequest,
     RecipeCommentResponse,
     RecipeActionResponse,
+    RecipeSearchResultResponse,
 )
 from app.main_api.dependencies.auth import get_current_auth_user, get_optional_auth_user
 from app.main_api.services import recipe_service
@@ -30,6 +31,18 @@ def request_recipe(req: RecipeRequest):
 @router.get("/recommendations/{category}", response_model=list[RecipeRecommendationResponse])
 def get_recommendations_by_category(category: str, limit: int = Query(default=20, ge=1, le=100)):
     return recipe_service.get_recommended_videos_by_category(category=category, limit=limit)
+
+
+@router.get("/search", response_model=list[RecipeSearchResultResponse])
+def search_recipes_by_ingredients(
+    ingredients: str = Query(..., description="쉼표로 구분된 재료 목록 (예: 양파,돼지고기,파)")
+):
+    # 쉼표로 분리 후 공백 제거, 빈 값 필터
+    names = [name.strip() for name in ingredients.split(",") if name.strip()]
+    if not names:
+        return []
+    return recipe_service.search_recipes_by_ingredients(names)
+
 
 @router.get("/{video_id}", response_model=RecipeResponse)
 def get_recipe_status(video_id: str):
