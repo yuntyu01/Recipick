@@ -10,6 +10,7 @@ from app.main_api.schemas.recipe_schema import (
     RecipeCommentResponse,
     RecipeActionResponse,
     RecipeSearchResultResponse,
+    RecipeSearchResponse,
 )
 from app.main_api.dependencies.auth import get_current_auth_user, get_optional_auth_user
 from app.main_api.services import recipe_service
@@ -33,7 +34,7 @@ def get_recommendations_by_category(category: str, limit: int = Query(default=20
     return recipe_service.get_recommended_videos_by_category(category=category, limit=limit)
 
 
-@router.get("/search", response_model=list[RecipeSearchResultResponse])
+@router.get("/search", response_model=RecipeSearchResponse)
 def search_recipes_by_ingredients(
     ingredients: str = Query(..., description="쉼표로 구분된 재료 목록 (예: 양파,돼지고기,파)")
 ):

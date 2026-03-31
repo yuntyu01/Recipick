@@ -75,3 +75,8 @@ class RecipeSearchResultResponse(BaseModel):
     thumbnail_url: str
     url: str
     category: str
+
+
+class RecipeSearchResponse(BaseModel):
+    recipes: list[RecipeSearchResultResponse]
+    available_ingredients: list[IngredientCountResponse]

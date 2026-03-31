@@ -1,5 +1,6 @@
 import boto3
 import json
+from collections import Counter
 from decimal import Decimal
 from typing import Optional
 from fastapi import HTTPException
@@ -234,8 +235,8 @@ def get_recommended_videos_by_category(category: str, limit: int = 20):
     return replace_decimals(items)
 
 
-# 다중 재료 교집합 레시피 검색
-def search_recipes_by_ingredients(names: list[str]) -> list[dict]:
+# 다중 재료 교집합 레시피 검색 + 연관 재료 집계
+def search_recipes_by_ingredients(names: list[str]) -> dict:
     # 각 재료의 video_id 목록을 개별 GetItem으로 조회
     video_sets = []
     for name in names:
@@ -243,7 +244,7 @@ def search_recipes_by_ingredients(names: list[str]) -> list[dict]:
         video_sets.append(set(ids))
 
     if not video_sets:
-        return []
+        return {"recipes": [], "available_ingredients": []}
 
     # set 교집합으로 모든 재료가 포함된 video_id만 남김
     intersection = video_sets[0]
@@ -251,8 +252,31 @@ def search_recipes_by_ingredients(names: list[str]) -> list[dict]:
         intersection = intersection & s
 
     if not intersection:
-        return []
+        return {"recipes": [], "available_ingredients": []}
 
-    # BatchGetItem으로 레시피 정보 일괄 조회
-    items = recipe_repo.batch_get_recipes_info(list(intersection))
-    return replace_decimals(items)
+    # BatchGetItem으로 레시피 정보 일괄 조회 (ingredients 포함)
+    items = replace_decimals(recipe_repo.batch_get_recipes_info(list(intersection)))
+
+    # 검색어로 입력된 재료명 집합 (집계 제외용)
+    excluded_names = {name.strip() for name in names}
+
+    # 모든 레시피의 ingredients에서 normalized_names 배열 집계
+    ingredient_counter: Counter = Counter()
+    for item in items:
+        for ingredient in item.get('ingredients') or []:
+            for norm_name in ingredient.get('normalized_names', []):
+                name = norm_name.strip()
+                if name and name not in excluded_names:
+                    ingredient_counter[name] += 1
+
+    # count 내림차순 정렬
+    aggregated_ingredients = [
+        {"name": name, "count": count}
+        for name, count in ingredient_counter.most_common()
+    ]
+
+    # 응답 전 ingredients 필드 제거 (페이로드 경량화)
+    for item in items:
+        item.pop('ingredients', None)
+
+    return {"recipes": items, "available_ingredients": aggregated_ingredients}

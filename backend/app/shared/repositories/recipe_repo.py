@@ -455,20 +455,24 @@ def get_ingredient_index(name: str) -> List[str]:
 
 
 def batch_get_recipes_info(video_ids: List[str]) -> List[dict]:
-    """여러 video_id에 대해 BatchGetItem으로 INFO 아이템을 한 번에 조회."""
+    """여러 video_id에 대해 BatchGetItem으로 INFO 아이템을 한 번에 조회. 100개 단위 청킹 처리."""
     if not video_ids:
         return []
 
     table_name = recipe_table.name
-    keys = [{'PK': f'VIDEO#{vid}', 'SK': 'INFO'} for vid in video_ids]
+    all_items = []
 
-    response = dynamodb.batch_get_item(
-        RequestItems={table_name: {'Keys': keys}}
-    )
-    items = response.get('Responses', {}).get(table_name, [])
+    # DynamoDB BatchGetItem 100개 제한 방어: 100개 단위로 분할 호출
+    for i in range(0, len(video_ids), 100):
+        chunk = video_ids[i:i + 100]
+        keys = [{'PK': f'VIDEO#{vid}', 'SK': 'INFO'} for vid in chunk]
+        response = dynamodb.batch_get_item(
+            RequestItems={table_name: {'Keys': keys}}
+        )
+        all_items.extend(response.get('Responses', {}).get(table_name, []))
 
     results = []
-    for item in items:
+    for item in all_items:
         video_id = str(item.get('PK', '')).replace('VIDEO#', '')
         results.append({
             'video_id': video_id,
@@ -477,6 +481,7 @@ def batch_get_recipes_info(video_ids: List[str]) -> List[dict]:
             'thumbnail_url': item.get('thumbnail_url') or f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
             'url': item.get('original_url') or f'https://www.youtube.com/watch?v={video_id}',
             'category': item.get('category') or '',
+            'ingredients': item.get('ingredients', []),
         })
     return results
 
