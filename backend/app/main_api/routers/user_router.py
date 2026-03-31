@@ -1,14 +1,44 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.main_api.schemas.user_schema import (
     UserProfileUpsertRequest,
     UserProfileResponse,
     UserHistoryCreateRequest,
     UserHistoryResponse,
     UserActivityResponse,
+    ProfileImagePresignRequest,
+    ProfileImagePresignResponse,
+    ProfileImageConfirmRequest,
+    ProfileImageConfirmResponse,
 )
+from app.main_api.dependencies.auth import get_current_auth_user
 from app.main_api.services import user_service
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+@router.post("/me/profile-image/presign", response_model=ProfileImagePresignResponse)
+def get_profile_image_presign(
+    req: ProfileImagePresignRequest,
+    auth_user: dict = Depends(get_current_auth_user),
+):
+    # S3 presigned PUT URL 발급 — 클라이언트가 S3에 직접 업로드
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    if req.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="jpeg, png, webp 형식만 허용됩니다.")
+    return user_service.generate_profile_image_presign(auth_user["user_id"], req.content_type)
+
+
+@router.put("/me/profile-image/confirm", response_model=ProfileImageConfirmResponse)
+def confirm_profile_image(
+    req: ProfileImageConfirmRequest,
+    auth_user: dict = Depends(get_current_auth_user),
+):
+    # s3_key 검증 후 DB URL 갱신 (서버가 직접 URL 조합)
+    try:
+        public_url = user_service.confirm_profile_image(auth_user["user_id"], req.s3_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"profile_image_url": public_url}
 
 
 @router.put("/{user_id}/profile", response_model=UserProfileResponse)

@@ -39,5 +39,11 @@ variable "ai_daily_limit" {
 variable "firebase_json" {
   description = "로그인 용 파이어베이스 json"
   type        = string
-  sensitive   = true 
+  sensitive   = true
+}
+
+variable "allowed_origins" {
+  description = "S3 CORS 허용 도메인 목록 (운영 시 프론트엔드 도메인으로 교체)"
+  type        = list(string)
+  default     = ["*"]
 }

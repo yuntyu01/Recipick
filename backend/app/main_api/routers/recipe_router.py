@@ -31,6 +31,7 @@ def request_recipe(req: RecipeRequest):
 
 @router.get("/recommendations/{category}", response_model=list[RecipeRecommendationResponse])
 def get_recommendations_by_category(category: str, limit: int = Query(default=20, ge=1, le=100)):
+    # 카테고리별 추천 레시피 목록 조회 (홈 화면/카테고리 탭)
     return recipe_service.get_recommended_videos_by_category(category=category, limit=limit)
 
 
@@ -84,6 +85,7 @@ def create_comment(
 
 @router.get("/{video_id}/comments", response_model=list[RecipeCommentResponse])
 def list_comments(video_id: str, limit: int = Query(default=20, ge=1, le=100)):
+    # 레시피 댓글 목록 최신순 조회
     return recipe_service.list_comments(video_id=video_id, limit=limit)
 
 

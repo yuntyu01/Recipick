@@ -104,10 +104,43 @@ resource "aws_dynamodb_table" "recipes" {
   }
 }
 
+# 프로필 이미지 등 정적 파일 저장소
 resource "aws_s3_bucket" "static" {
   bucket = "recipick-static-bucket"
 }
 
+# 프론트엔드가 presigned URL로 S3에 직접 PUT 업로드할 수 있도록 CORS 허용
+resource "aws_s3_bucket_cors_configuration" "static" {
+  bucket = aws_s3_bucket.static.id
+
+  cors_rule {
+    allowed_methods = ["PUT", "GET"]
+    allowed_origins = var.allowed_origins  # 운영 시 terraform.tfvars에서 도메인 명시
+    allowed_headers = ["Content-Type"]
+    max_age_seconds = 3000
+  }
+}
+
+# 업로드 미완료(유령) 파일 24시간 후 자동 삭제
+resource "aws_s3_bucket_lifecycle_configuration" "static" {
+  bucket = aws_s3_bucket.static.id
+
+  rule {
+    id     = "cleanup-orphan-profile-images"
+    status = "Enabled"
+
+    filter {
+      prefix = "profile-images/"
+    }
+
+    # presign만 받고 업로드 안 한 불완전 멀티파트 업로드 정리
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+# LLM 분석 요청을 비동기로 넘기는 SQS 큐 (메인 API → 워커 람다 연결)
 resource "aws_sqs_queue" "recipe_queue" {
   name = "recipick-processing-queue"
   # 워커 람다의 타임아웃(15분)과 같거나 길어야 함
@@ -119,17 +152,20 @@ resource "aws_sqs_queue" "recipe_queue" {
 # -----------------------------------------------------------------------------
 
 # --- A. 메인 API용 권한 (가벼운 권한) ---
+# 메인 API 람다 실행 역할 (DynamoDB/SQS/S3 접근)
 resource "aws_iam_role" "main_api_role" {
   name = "recipick-main-api-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Service = "lambda.amazonaws.com" }, Action = "sts:AssumeRole" }]
   })
 }
+# 메인 API 람다에 CloudWatch 로그 기록 권한 부여
 resource "aws_iam_role_policy_attachment" "main_api_logs" {
   role       = aws_iam_role.main_api_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# 메인 API 람다 세부 권한 정책 (DynamoDB CRUD / SQS 전송 / S3 presign용)
 resource "aws_iam_role_policy" "main_api_policy" {
   name = "recipick-main-api-policy"
   role = aws_iam_role.main_api_role.id
@@ -178,6 +214,7 @@ resource "aws_iam_role_policy" "main_api_policy" {
 }
 
 # --- B. LLM 워커용 권한 (무거운 권한) ---
+# LLM 워커 람다 실행 역할 (DynamoDB 상태 업데이트 / SQS 소비)
 resource "aws_iam_role" "llm_worker_role" {
   name = "recipick-llm-worker-role"
   assume_role_policy = jsonencode({
@@ -185,11 +222,13 @@ resource "aws_iam_role" "llm_worker_role" {
   })
 }
 
+# LLM 워커 람다에 CloudWatch 로그 기록 권한 부여
 resource "aws_iam_role_policy_attachment" "llm_worker_logs" {
   role       = aws_iam_role.llm_worker_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# LLM 워커 람다 세부 권한 정책 (DynamoDB 레시피 저장 / SQS 메시지 소비)
 resource "aws_iam_role_policy" "llm_worker_policy" {
   name = "recipick-llm-worker-policy"
   role = aws_iam_role.llm_worker_role.id
@@ -214,6 +253,7 @@ resource "aws_iam_role_policy" "llm_worker_policy" {
 # 3. Lambda Functions (Main api, LLM api)
 # -----------------------------------------------------------------------------
 
+# 메인 API / LLM 워커 Docker 이미지를 저장하는 ECR 레포지토리
 resource "aws_ecr_repository" "backend" {
   name                 = var.ecr_repository_name
   image_tag_mutability = "MUTABLE"
@@ -318,6 +358,7 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 }
 
+# API Gateway가 메인 API 람다를 호출할 수 있도록 실행 권한 부여
 resource "aws_lambda_permission" "allow_apigw" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
