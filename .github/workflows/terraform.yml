@@ -45,6 +45,10 @@ jobs:
       - name: Terraform Plan
         run: terraform plan
         working-directory: ${{ env.TF_WORKDIR }}
+        env:
+          TF_VAR_RAPIDAPI_KEY: ${{ secrets.TF_VAR_RAPIDAPI_KEY }}
+          TF_VAR_gemini_api_key: ${{ secrets.TF_VAR_GEMINI_API_KEY }}
+          TF_VAR_firebase_json: ${{ secrets.TF_VAR_FIREBASE_JSON }}
 
   apply:
     if: github.event_name == 'workflow_dispatch'
@@ -72,3 +76,7 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
         working-directory: ${{ env.TF_WORKDIR }}
+        env:
+          TF_VAR_RAPIDAPI_KEY: ${{ secrets.TF_VAR_RAPIDAPI_KEY }}
+          TF_VAR_gemini_api_key: ${{ secrets.TF_VAR_GEMINI_API_KEY }}
+          TF_VAR_firebase_json: ${{ secrets.TF_VAR_FIREBASE_JSON }}
