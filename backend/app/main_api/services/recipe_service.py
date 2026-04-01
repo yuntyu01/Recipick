@@ -25,15 +25,24 @@ def replace_decimals(obj):
 def process_recipe_request(video_id: str, original_url: str, sharer_nickname: str, title: str, channel_name: str):
     # 1) 캐시 확인: 완료된 레시피면 즉시 반환
     existing = recipe_repo.get_recipe(video_id)
-    if existing and existing.get('status') == RecipeStatus.COMPLETED:
-        return {
-            "status": RecipeStatus.COMPLETED,
-            "video_id": video_id,
-            "thumbnail_url": existing.get('thumbnail_url'),
-            "title": title,
-            "channel_name": channel_name,
-            "data": existing
-        }
+    if existing:
+        if existing.get('status') == RecipeStatus.COMPLETED:
+            return {
+                "status": RecipeStatus.COMPLETED,
+                "video_id": video_id,
+                "thumbnail_url": existing.get('thumbnail_url'),
+                "title": title,
+                "channel_name": channel_name,
+                "data": existing
+            }
+        if existing.get('status') == RecipeStatus.NOT_RECIPE:
+            return {
+                "status": RecipeStatus.NOT_RECIPE,
+                "video_id": video_id,
+                "thumbnail_url": existing.get('thumbnail_url'),
+                "title": title,
+                "channel_name": channel_name,
+            }
   
     # 2) 최초 요청은 PROCESSING 상태로 뼈대 저장
     thumb = recipe_repo.save_initial_recipe(video_id, original_url, sharer_nickname, title, channel_name)
