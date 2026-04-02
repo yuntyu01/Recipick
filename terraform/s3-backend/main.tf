@@ -11,6 +11,12 @@ terraform {
 
 provider "aws" {
   region = "ap-northeast-2"
+
+  default_tags {
+    tags = {
+      Project = "Recipick"
+    }
+  }
 }
 
 # Terraform state 저장용 S3 버킷

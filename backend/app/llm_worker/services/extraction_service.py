@@ -67,9 +67,13 @@ RECIPE_SCHEMA = {
           "step": {"type": "number"},
           "desc": {"type": "string"},
           "timer_sec": {"type": "number"},
-          "video_timestamp": {"type": "string"}
+          "video_timestamp": {"type": "string"},
+          "ingredients_used": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
         },
-        "required": ["step","desc","timer_sec","video_timestamp"]
+        "required": ["step","desc","timer_sec","video_timestamp","ingredients_used"]
       }
     }
   },
@@ -111,9 +115,10 @@ def run_etl_pipeline(video_id: str, original_url: str):
       # 주의사항: 소분류(부위) 명칭에는 반드시 어떤 고기인지(소, 돼지, 닭 등) 접두사를 붙여 고유하게 만들어야 해.
     - 각 재료의 예상 가격(estimated_price)을 포함할 것.
     - alternatives(대체재)가 있다면 이름, 양, 가격을 포함하고, 없으면 빈 배열([])로 처리.
-    7. steps: 
+    7. steps:
     - timer_sec: 조리 과정 중 타이머가 필요한 경우 초 단위로 입력 (없으면 0).
     - video_timestamp: 해당 과정이 시작되는 영상 내 시간 (MM:SS).
+    - ingredients_used: 해당 단계에서 사용되는 재료 목록 (재료명과 양을 하나의 문자열로, 없으면 빈 배열[]). 예시: ["마늘 1스푼", "간장 2큰술"]
 
     [응답 JSON 구조]
     {
@@ -135,7 +140,7 @@ def run_etl_pipeline(video_id: str, original_url: str):
         }
     ],
     "steps": [
-        { "step": Number, "desc": "String", "timer_sec": Number, "video_timestamp": "MM:SS" }
+        { "step": Number, "desc": "String", "timer_sec": Number, "video_timestamp": "MM:SS", "ingredients_used": ["마늘 1스푼"] }
     ]
     }
     """
