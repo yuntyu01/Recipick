@@ -27,13 +27,5 @@ CMD ["app.main_api.main.handler"]
 # ==========================================
 FROM base AS worker
 
-RUN dnf install -y tar xz && \
-    curl -O https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz && \
-    tar xvf ffmpeg-release-amd64-static.tar.xz && \
-    mv ffmpeg-*-static/ffmpeg /usr/local/bin/ && \
-    mv ffmpeg-*-static/ffprobe /usr/local/bin/ && \
-    rm -rf ffmpeg* && \
-    dnf clean all
-
 # SQS 이벤트 발생 시 실행될 핸들러 지정
 CMD ["app.llm_worker.worker.sqs_handler"]
