@@ -391,6 +391,51 @@ def create_share(video_id: str, user_id: str):
 
 
 # ─────────────────────────────────────────────────────────────
+# 레시피 추천 풀 수집
+# ─────────────────────────────────────────────────────────────
+
+def get_recipe_pool_for_recommendation(per_category: int = 20, categories: list = None) -> list:
+    """지정 카테고리(없으면 전체)에서 COMPLETED 레시피를 per_category개씩 수집해 추천 풀 반환."""
+    if categories is None:
+        categories = ["한식", "중식", "일식", "양식", "분식", "디저트"]
+    pool = []
+    for category in categories:
+        response = recipe_table.query(
+            IndexName="CategoryIndex",
+            KeyConditionExpression=Key("category").eq(category),
+            ScanIndexForward=False,
+            Limit=per_category * 3,
+        )
+        count = 0
+        for item in response.get("Items", []):
+            if not str(item.get("PK", "")).startswith("VIDEO#"):
+                continue
+            if item.get("SK") != "INFO":
+                continue
+            if item.get("status") != "COMPLETED":
+                continue
+            video_id = str(item["PK"]).replace("VIDEO#", "")
+            nutrition = item.get("nutrition_details") or {}
+            pool.append({
+                "video_id":              video_id,
+                "title":                 item.get("title") or "",
+                "channel_name":          item.get("channel_name") or "",
+                "thumbnail_url":         item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "url":                   item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "category":              item.get("category") or category,
+                "difficulty":            item.get("difficulty") or "",
+                "total_calorie":         item.get("total_calorie"),
+                "total_estimated_price": item.get("total_estimated_price"),
+                "protein_g":             nutrition.get("protein_g"),
+                "servings":              item.get("servings"),
+            })
+            count += 1
+            if count >= per_category:
+                break
+    return pool
+
+
+# ─────────────────────────────────────────────────────────────
 # 냉장고 파먹기 (역색인 + 카운터)
 # ─────────────────────────────────────────────────────────────
 

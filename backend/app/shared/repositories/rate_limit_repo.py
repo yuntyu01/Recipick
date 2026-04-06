@@ -26,6 +26,15 @@ def _next_midnight_utc_ts() -> int:
     return int(next_day.timestamp())
 
 
+def get_daily_ai_count(user_id: str) -> int:
+    """오늘 사용한 AI 횟수만 조회 (카운트 증가 없음)."""
+    pk, sk = _today_key(user_id)
+    item = dynamodb.Table(settings.RECIPE_TABLE).get_item(
+        Key={"PK": pk, "SK": sk}
+    ).get("Item") or {}
+    return int(item.get("ai_ask_count", 0))
+
+
 def increment_daily_ai_count(user_id: str, limit: int) -> dict:
     """하루 질문 횟수 1 증가 및 제한 초과 여부 반환"""
     pk, sk = _today_key(user_id)
