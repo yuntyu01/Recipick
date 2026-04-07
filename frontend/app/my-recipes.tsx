@@ -67,23 +67,35 @@ function formatWon(value: any) {
     return `${num.toLocaleString('ko-KR')}원`;
 }
 
-function mapHistoryItemToMyRecipe(item: UserHistoryItem, index: number): MyRecipeItem {
+// MyRecipesPage.tsx 파일 내부
+
+function mapHistoryItemToMyRecipe(item: any, index: number): MyRecipeItem {
+    // 1. 비디오 ID 추출
     const videoId = item.video_id ?? '';
-    const url =
-        item.original_url ||
-        item.url ||
-        (videoId ? buildYoutubeUrl(videoId) : '');
+
+    // 2. URL 결정 (백엔드 필드명: url 혹은 original_url)
+    const url = item.url || item.original_url || (videoId ? buildYoutubeUrl(videoId) : '');
 
     return {
-        id: `history-${videoId}-${item.saved_at || item.created_at || index}`,
+        // ID 생성 시 중복 방지
+        id: `history-${videoId}-${index}`,
         videoId,
+
+        // [중요!] 백엔드 테스트 코드에서 'recipe_title'이라는 필드명을 사용함
         title: item.recipe_title || item.title || '제목 없음',
+
+        // 백엔드 필드명: channel_name
         channelName: item.channel_name || '채널명 없음',
-        thumbUrl:
-            item.thumbnail_url ||
-            (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''),
+
+        // 백엔드 필드명: thumbnail_url
+        thumbUrl: item.thumbnail_url || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''),
+
+        // 백엔드 필드명: total_estimated_price
         price: formatWon(item.total_estimated_price),
+
+        // [중요!] 백엔드 테스트 코드에서 'saved_at'이라는 필드명을 사용함
         createdAt: item.saved_at || item.created_at || '',
+
         category: item.category || '',
         url,
         recipeData: item.recipe_data ?? null,

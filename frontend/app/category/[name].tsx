@@ -71,6 +71,8 @@ export default function CategoryPage() {
     const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // app/category/[name].tsx 내부의 loadCategoryFeed 함수
+
     const loadCategoryFeed = async () => {
         try {
             if (!categoryName) {
@@ -82,13 +84,17 @@ export default function CategoryPage() {
             setLoading(true);
             setError(null);
 
-            const res = await getRecommendationsByCategory('all');
-            console.log("서버에서 받은 전체 데이터:", res);
-            const list = normalizeRecommendations(res);
+            // [수정 포인트!]
+            // 1. 기존 'all' 대신 실제 선택된 카테고리(categoryName)를 보냅니다.
+            // 2. 만약 categoryName이 '전체' 또는 'all'이라면 백엔드가 지원하는 '한식'으로 바꿔서 보냅니다.
+            const target = (categoryName === 'all' || categoryName === '전체' || !categoryName)
+                ? '한식'
+                : categoryName;
 
-            console.log('[CATEGORY NAME]', categoryName);
-            console.log('[CATEGORY API RAW]', res);
-            console.log('[CATEGORY API LIST]', list);
+            const res = await getRecommendationsByCategory(target);
+
+            console.log("서버에서 받은 데이터:", res);
+            const list = normalizeRecommendations(res);
 
             const mapped = list.map(mapRecommendationToCategoryItem);
             setItems(mapped);

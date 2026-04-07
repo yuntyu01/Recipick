@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
+import VoiceSearch from '../components/VoiceSearch';
 
 import YoutubePlayer from "react-native-youtube-iframe";
 
@@ -131,14 +132,17 @@ export default function CookScreen() {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    const [playerStartSec, setPlayerStartSec] = useState(0);
+    const playerRef = useRef<any>(null);
 
     useEffect(() => {
         console.log('[COOK PARAMS]', params);
     }, [params]);
 
     const seekTo = (sec: number) => {
-        setPlayerStartSec(Math.max(0, Math.floor(sec)));
+        // ✅ 직접 명령 전달: playerRef가 연결되어 있다면 해당 초(sec)로 즉시 점프!
+        if (playerRef.current) {
+            playerRef.current.seekTo(Math.max(0, Math.floor(sec)), true);
+        }
     };
 
     const playVideo = () => {
@@ -406,20 +410,6 @@ export default function CookScreen() {
         [activeIdx, steps]
     );
 
-    const embedUrl = useMemo(() => {
-        if (!videoId) return '';
-
-        const query = new URLSearchParams({
-            playsinline: '1',
-            rel: '0',
-            modestbranding: '1',
-            controls: '1',
-            autoplay: isPlaying ? '1' : '0',
-            start: String(playerStartSec),
-        });
-
-        return `https://www.youtube.com/embed/${videoId}?${query.toString()}`;
-    }, [videoId, playerStartSec, isPlaying]);
 
     const VIDEO_W = SCREEN_W;
     const VIDEO_H = Math.round((VIDEO_W * 9) / 16);
@@ -452,6 +442,7 @@ export default function CookScreen() {
                     {videoId ? (
                         <>
                             <YoutubePlayer
+    ref={playerRef}
     height={VIDEO_H}
     play={isPlaying}
     videoId={videoId}
@@ -645,32 +636,24 @@ export default function CookScreen() {
             </Modal>
 
             <Modal visible={voiceOpen} transparent animationType="fade" onRequestClose={closeVoiceModal}>
-                <View style={styles.voiceBackdrop}>
-                    <Animated.View style={[styles.voiceCard, { opacity: fadeAnim }]}>
-                        <Text style={styles.voiceTitle}>말하세요</Text>
-                        <Text style={styles.voiceSub}>{voiceStatusText}</Text>
+            <View style={styles.voiceBackdrop}>
+                <Animated.View style={[styles.voiceCard, { opacity: fadeAnim }]}>
+      
+                <Text style={styles.voiceTitle}>말하세요</Text>
+                <Text style={styles.voiceSub}>{voiceStatusText}</Text>
 
-                        <View style={styles.voicePulseWrap}>
-                            <Animated.View
-                                style={[
-                                    styles.voicePulseOuter,
-                                    {
-                                        transform: [{ scale: pulseAnim }],
-                                    },
-                                ]}
-                            />
-                            <View style={styles.voiceMicCircle}>
-                                <Ionicons name="mic" size={34} color="#fff" />
-                            </View>
-                        </View>
+                {/* ✅ 여기 추가 */}
+                <VoiceSearch 
+                    videoId={videoId} 
+                    currentStep={activeIdx} 
+                />
 
-                        <Text style={styles.voiceHint}>이 기능은 현재 준비 중이에요</Text>
+                <TouchableOpacity style={styles.voiceCloseBtn} onPress={closeVoiceModal} activeOpacity={0.9}>
+                    <Text style={styles.voiceCloseText}>닫기</Text>
+                </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.voiceCloseBtn} onPress={closeVoiceModal} activeOpacity={0.9}>
-                            <Text style={styles.voiceCloseText}>닫기</Text>
-                        </TouchableOpacity>
-                    </Animated.View>
-                </View>
+                </Animated.View>
+            </View>
             </Modal>
 
             <Modal visible={alarmOpen} transparent animationType="fade" onRequestClose={stopAlarm}>
