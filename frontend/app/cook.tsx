@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
+import VoiceSearch from '../components/VoiceSearch';
 
 import YoutubePlayer from "react-native-youtube-iframe";
 
@@ -645,32 +646,24 @@ export default function CookScreen() {
             </Modal>
 
             <Modal visible={voiceOpen} transparent animationType="fade" onRequestClose={closeVoiceModal}>
-                <View style={styles.voiceBackdrop}>
-                    <Animated.View style={[styles.voiceCard, { opacity: fadeAnim }]}>
-                        <Text style={styles.voiceTitle}>말하세요</Text>
-                        <Text style={styles.voiceSub}>{voiceStatusText}</Text>
+            <View style={styles.voiceBackdrop}>
+                <Animated.View style={[styles.voiceCard, { opacity: fadeAnim }]}>
+      
+                <Text style={styles.voiceTitle}>말하세요</Text>
+                <Text style={styles.voiceSub}>{voiceStatusText}</Text>
 
-                        <View style={styles.voicePulseWrap}>
-                            <Animated.View
-                                style={[
-                                    styles.voicePulseOuter,
-                                    {
-                                        transform: [{ scale: pulseAnim }],
-                                    },
-                                ]}
-                            />
-                            <View style={styles.voiceMicCircle}>
-                                <Ionicons name="mic" size={34} color="#fff" />
-                            </View>
-                        </View>
+                {/* ✅ 여기 추가 */}
+                <VoiceSearch 
+                    videoId={videoId} 
+                    currentStep={activeIdx} 
+                />
 
-                        <Text style={styles.voiceHint}>이 기능은 현재 준비 중이에요</Text>
+                <TouchableOpacity style={styles.voiceCloseBtn} onPress={closeVoiceModal} activeOpacity={0.9}>
+                    <Text style={styles.voiceCloseText}>닫기</Text>
+                </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.voiceCloseBtn} onPress={closeVoiceModal} activeOpacity={0.9}>
-                            <Text style={styles.voiceCloseText}>닫기</Text>
-                        </TouchableOpacity>
-                    </Animated.View>
-                </View>
+                </Animated.View>
+            </View>
             </Modal>
 
             <Modal visible={alarmOpen} transparent animationType="fade" onRequestClose={stopAlarm}>

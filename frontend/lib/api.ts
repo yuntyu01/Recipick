@@ -1,6 +1,8 @@
 // frontend/app/lib/api.ts
 
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const BASE_URL = 'https://mfxiwq8mpg.execute-api.ap-northeast-2.amazonaws.com';
 
@@ -233,12 +235,26 @@ type RequestOptions = RequestInit & {
 };
 
 async function getStoredAccessToken(): Promise<string | undefined> {
-  const token =
-    (await SecureStore.getItemAsync('accessToken')) ||
-    (await SecureStore.getItemAsync('access_token')) ||
-    undefined;
+  // 1. 웹 환경일 때
+  if (Platform.OS === 'web') {
+    const token =
+      (await AsyncStorage.getItem('accessToken')) ||
+      (await AsyncStorage.getItem('access_token')) ||
+      undefined;
+    return token;
+  }
 
-  return token;
+  // 2. 모바일(앱) 환경일 때
+  try {
+    const token =
+      (await SecureStore.getItemAsync('accessToken')) ||
+      (await SecureStore.getItemAsync('access_token')) ||
+      undefined;
+    return token;
+  } catch (error) {
+    console.error('SecureStore 에러:', error);
+    return undefined;
+  }
 }
 
 async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
@@ -256,7 +272,7 @@ async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
 
   try {
     res = await fetch(url, {
-      credentials: 'include',
+      //credentials: 'include',
       ...restOpts,
       headers: {
         Accept: 'application/json',
@@ -390,27 +406,16 @@ export async function waitRecipeCompleted(
  * recommendation API
  * ========================= */
 
-export async function getRecommendationsByCategory(
-  category: RecipeCategory | string
-): Promise<RecommendationResponse> {
-  return request<RecommendationResponse>(
-    `/api/recommendations/${encodeURIComponent(category)}`,
-    {
-      method: 'GET',
-    }
-  );
+export async function getRecommendationsByCategory(category: string, limit = 20) {
+  // 백엔드 테스트 코드의 경로(/api/recipes/recommendations/...)와 맞춰줍니다.
+  const res = await request(`/api/recipes/recommendations/${category}?limit=${limit}`);
+  return res;
 }
 
-export function normalizeRecommendations(
-  response: RecommendationResponse | null | undefined
-): RecommendationItem[] {
+export function normalizeRecommendations(response: any): RecommendationItem[] {
   if (!response) return [];
   if (Array.isArray(response)) return response;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.recommendations)) return response.recommendations;
-  if (Array.isArray(response.result)) return response.result;
-  return [];
+  return response.data || response.items || [];
 }
 
 /* =========================
@@ -445,16 +450,20 @@ export async function getUserHistory(
   );
 }
 
-export function normalizeUserHistory(
-  response: UserHistoryResponse | null | undefined
-): UserHistoryItem[] {
+export function normalizeUserHistory(response: any): any[] {
   if (!response) return [];
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.data)) return response.data;
-  if (Array.isArray(response.history)) return response.history;
-  if (Array.isArray(response.result)) return response.result;
-  return [];
+
+  // 서버 로그를 보면 { "data": [...] } 형태로 오고 있습니다.
+  // 이 'data' 안의 배열을 꺼내줘야 메인 화면에 리스트가 뜹니다!
+  if (response && typeof response === 'object' && Array.isArray(response.data)) {
+    return response.data;
+  }
+
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  return response.items || response.history || response.result || [];
 }
 
 /* =========================
@@ -483,34 +492,63 @@ export async function firebaseLogin(
  * 프론트 편의용 helper
  * ========================= */
 
+// frontend/app/lib/api.ts
+
 export function buildUserHistoryPayloadFromRecipe(
   recipe: RecipeData
 ): UserHistoryCreateRequest {
   return {
-    video_id: recipe.video_id,
-    recipe_title: recipe.title,
-    thumbnail_url: recipe.thumbnail_url,
-    original_url: recipe.original_url,
-    url: recipe.original_url,
+    video_id: String(recipe.video_id), // 확실하게 문자열로 변환
+    recipe_title: String(recipe.title),
+    thumbnail_url: recipe.thumbnail_url || '',
+    original_url: recipe.original_url || '',
+    url: recipe.original_url || '',
 
-    channel_name: recipe.channel_name,
-    category: recipe.category,
-    difficulty: recipe.difficulty,
-    servings: recipe.servings,
-    total_estimated_price: recipe.total_estimated_price,
-    total_calorie: recipe.total_calorie,
+    channel_name: recipe.channel_name || '',
+    category: recipe.category || '기타',
+    difficulty: recipe.difficulty || '중',
+    servings: String(recipe.servings || '1'), // 숫자일 경우 문자열로
+    total_estimated_price: String(recipe.total_estimated_price || '0'),
+    total_calorie: String(recipe.total_calorie || '0'),
 
-    like_count: recipe.like_count,
-    comment_count: recipe.comment_count,
-    share_count: recipe.share_count,
+    like_count: String(recipe.like_count || '0'),
+    comment_count: String(recipe.comment_count || '0'),
+    share_count: String(recipe.share_count || '0'),
 
-    status: recipe.status,
+    status: recipe.status || 'COMPLETED',
     saved_at: new Date().toISOString(),
 
     recipe_data: {
-      steps: recipe.steps,
-      ingredients: recipe.ingredients,
-      nutrition_details: recipe.nutrition_details,
+      steps: recipe.steps || [],
+      ingredients: recipe.ingredients || [],
+      nutrition_details: recipe.nutrition_details || {
+        sodium_mg: "0",
+        fat_g: "0",
+        sugar_g: "0",
+        carbs_g: "0",
+        protein_g: "0"
+      },
     },
   };
+}
+export type AiAskRequest = {
+  video_id: string;
+  question: string;
+  current_step: number; 
+};
+
+export type AiAskResponse = {
+  answer: string;
+  current_step: number;
+  video_id: string;
+};
+
+export async function askAi(body: AiAskRequest): Promise<AiAskResponse> {
+  const token = await getStoredAccessToken();
+
+  return request<AiAskResponse>('/api/ai/ask', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    token,
+  });
 }

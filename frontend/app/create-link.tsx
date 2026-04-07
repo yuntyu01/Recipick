@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import YoutubePlayer from "react-native-youtube-iframe";
 
 const BRAND = '#54CDA4';
 const BG = '#F3F6F6';
@@ -95,6 +96,14 @@ function safeText(value: any, fallback = '') {
 export default function CreateLink() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const playerRef = useRef<any>(null);
+
+  const handleSeekTo = (timestamp: string) => {
+      if (!timestamp || !playerRef.current) return;
+      const parts = timestamp.split(':').map(Number);
+      const seconds = parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0] * 3600 + parts[1] * 60 + parts[2];
+      playerRef.current.seekTo(seconds, true);
+    };
 
   const params = useLocalSearchParams();
   const paramLink = firstString(params.link);
@@ -228,20 +237,14 @@ export default function CreateLink() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity activeOpacity={0.95} style={styles.videoWrap} onPress={handleOpenYoutube}>
-          {thumbUrl ? (
-            <Image source={{ uri: thumbUrl }} style={styles.videoImg} resizeMode="cover" />
-          ) : (
-            <View style={[styles.videoImg, { backgroundColor: '#DDE6E6' }]} />
-          )}
-
-          <View style={styles.playOverlay} pointerEvents="none">
-            <View style={styles.playCircle}>
-              <Ionicons name="play" size={26} color="#fff" />
-            </View>
-          </View>
-          <Text style={styles.youtubeBadge}>YouTube</Text>
-        </TouchableOpacity>
+        <View style={styles.videoWrap}>
+          <YoutubePlayer
+            ref={playerRef}
+            height={VIDEO_H}
+            play={false}
+            videoId={videoId}
+          />
+        </View>
 
         <View style={styles.metaFixed}>
           <Text style={styles.titleText} numberOfLines={2}>
@@ -292,7 +295,10 @@ export default function CreateLink() {
                     <TouchableOpacity
                       key={s.id}
                       activeOpacity={0.92}
-                      onPress={() => setActiveStepIdx(idx)}
+                      onPress={() => {
+                        setActiveStepIdx(idx);
+                        if (s.videoTimestamp) handleSeekTo(s.videoTimestamp); // ✅ 시간을 누르면 영상 이동!
+                      }}
                       style={[styles.stepCard, idx > 0 && { marginTop: 14 }]}
                     >
                       <Text style={[styles.stepTitle, active && { color: BRAND }]}>{s.title}</Text>

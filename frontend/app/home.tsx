@@ -324,21 +324,23 @@ export default function Home() {
       setAnalyzeError(null);
       setDetailLoadingId(item.id);
 
-      if (item.recipeData && isFullRecipeData(item.recipeData)) {
-        openCreateLinkScreen({
-          url: item.url,
-          videoId: item.videoId,
-          title: item.title,
-          channelName: item.channelName,
-          thumbnailUrl: item.thumbUrl,
-          recipeData: item.recipeData,
-        });
-        return;
-      }
-
+      // 1. 상세 데이터 가져오기
       const detail = await getRecipe(item.videoId);
 
       if (detail.status === 'COMPLETED' && detail.data) {
+
+        // ✅ [핵심 추가] 상세 페이지 진입 시 서버 DB에 '최근 본 레시피'로 저장!
+        if (userId) {
+          try {
+            // api.ts에 있는 저장 함수 호출
+            await createUserHistorySafe(userId, detail.data);
+            // 저장 후 메인 피드를 다시 불러와야 목록에 즉시 반영됩니다.
+            await loadHomeFeed(userId);
+          } catch (historyErr) {
+            console.log("히스토리 저장 실패(무시가능):", historyErr);
+          }
+        }
+
         openCreateLinkScreen({
           url: item.url,
           videoId: detail.video_id,
@@ -387,14 +389,18 @@ export default function Home() {
       const recommendCategory: RecipeCategory = '한식';
 
       const [historyResult, recommendResult] = await Promise.allSettled([
-        currentUserId ? getUserHistory(currentUserId, 20) : Promise.resolve([]),
-        getRecommendationsByCategory(recommendCategory),
-      ]);
+            currentUserId ? getUserHistory(currentUserId, 50) : Promise.resolve([]), // 넉넉히 50개 가져오기
+            getRecommendationsByCategory(recommendCategory),
+          ]);
 
       if (historyResult.status === 'fulfilled') {
-        const historyItems = normalizeUserHistory(historyResult.value).map(mapHistoryItemToHome);
-        setMyRecipes(historyItems.slice(0, 10));
-        setRecentRecipes(historyItems.slice(0, 5));
+        // 서버에서 받아온 전체 히스토리 데이터를 정리합니다.
+        const allHistory = normalizeUserHistory(historyResult.status === 'fulfilled' ? historyResult.value : []).map(mapHistoryItemToHome);
+
+        setMyRecipes(allHistory.slice(0, 10));
+
+        setRecentRecipes(allHistory.slice(0, 5));
+
       } else {
         console.log('[HOME HISTORY ERROR]', historyResult.reason);
         setMyRecipes([]);
@@ -527,25 +533,37 @@ export default function Home() {
       }
 
       try {
-        if (resolvedUserId) {
-          await createUserHistorySafe(resolvedUserId, finalRes.data);
-        }
-      } catch (historyError) {
-        console.log('[CREATE USER HISTORY ERROR]', historyError);
-      }
+            // [수정] resolvedUserId가 확실히 있는지 한 번 더 확인합니다.
+            let currentId = resolvedUserId || userId;
+            if (!currentId) {
+              currentId = await getCurrentUserId();
+              setUserId(currentId);
+            }
+
+            if (currentId) {
+              // 1. 서버에 저장 요청 (이게 성공해야 내 레시피에 들어갑니다)
+              await createUserHistorySafe(currentId, finalRes.data);
+              console.log('[저장 완료] 내 히스토리에 추가되었습니다.');
+
+              // 2. [핵심] 저장 직후에 목록을 다시 불러옵니다. (ID를 인자로 꼭 넘겨주세요)
+              await loadHomeFeed(currentId);
+            }
+          } catch (historyError) {
+            console.log('[CREATE USER HISTORY ERROR]', historyError);
+          }
 
       openCreateLinkScreen({
-        url: trimmed,
-        videoId: finalRes.video_id ?? videoId,
-        title: finalRes.title || safeTitle,
-        channelName: finalRes.channel_name || safeChannelName,
-        thumbnailUrl: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
-        recipeData: finalRes.data,
-      });
+            url: trimmed,
+            videoId: finalRes.video_id ?? videoId,
+            title: finalRes.title || safeTitle,
+            channelName: finalRes.channel_name || safeChannelName,
+            thumbnailUrl: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
+            recipeData: finalRes.data,
+          });
 
-      setShowCreatePanel(false);
-      setLink('');
-      setVideoMeta(null);
+          setShowCreatePanel(false);
+          setLink('');
+          setVideoMeta(null);
 
       await loadHomeFeed(resolvedUserId!);
     } catch (e: any) {
@@ -556,9 +574,36 @@ export default function Home() {
     }
   };
 
+  // Home.tsx 내의 createUserHistorySafe 함수 수정
+
   const createUserHistorySafe = async (resolvedUserId: string, recipe: RecipeData) => {
-    const payload = buildUserHistoryPayloadFromRecipe(recipe);
-    await createUserHistory(resolvedUserId, payload);
+    // 💡 추가: 유저 ID가 없으면 시도조차 하지 않음 (500 에러 방지)
+    if (!resolvedUserId) return;
+
+    try {
+      const payload = {
+        video_id: videoMeta?.videoId || recipe.video_id || '',
+        title: videoMeta?.title || '제목 없음',
+        channel_name: videoMeta?.channelName || '채널명 없음',
+        thumbnail_url: videoMeta?.thumbnailUrl || '',
+        original_url: link,
+        // 💡 중요: recipe_data 내부의 불필요한 필드를 제거하거나 형식을 맞춤
+        recipe_data: {
+          ...recipe,
+          steps: recipe.steps || [],
+          ingredients: recipe.ingredients || []
+        },
+        category: recipe.category || '한식',
+        total_estimated_price: String(recipe.total_estimated_price || '0'),
+      };
+
+      console.log('[서버 저장 시도]:', payload.title);
+      const response = await createUserHistory(resolvedUserId, payload);
+      console.log('[저장 성공]:', response);
+    } catch (error: any) {
+      // 500 에러가 나도 앱이 죽지 않게 처리
+      console.warn('[저장 실패] 서버 500 오류 가능성:', error.message);
+    }
   };
 
   return (
@@ -718,18 +763,21 @@ export default function Home() {
       {!!homeFeedError && <Text style={styles.oembedError}>{homeFeedError}</Text>}
       {!!detailLoadingId && <Text style={styles.homeFeedHint}>레시피 상세 정보 불러오는 중...</Text>}
 
-      <SectionHeader title="내 레시피" onPressRight={() => router.push('/my-recipes')} />
+      <SectionHeader
+        title="내 레시피"
+        onPressRight={() => router.push({ pathname: '/my-recipes', params: { title: '내 레시피' } })}
+      />
       <FlatList
         horizontal
         data={myRecipes}
         keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingLeft: H_LIST_LEFT, paddingRight: s(18) }}
-        ItemSeparatorComponent={() => <View style={{ width: H_LIST_GAP }} />}
-        snapToInterval={H_CARD_W + H_LIST_GAP}
-        decelerationRate="fast"
+        contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
+        ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
         ListEmptyComponent={
-          !homeFeedLoading ? <Text style={styles.emptyText}>아직 저장된 레시피가 없어.</Text> : null
+          <View style={{ width: SCREEN_W - s(36), paddingLeft: s(10) }}>
+            <Text style={styles.emptyText}>아직 분석한 레시피가 없어요.</Text>
+          </View>
         }
         renderItem={({ item }) => (
           <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
@@ -757,11 +805,16 @@ export default function Home() {
         )}
       />
 
-      <Text style={styles.recentHeader}>최근 많이 사용한 레시피</Text>
+      <SectionHeader
+        title="최근 많이 사용한 레시피"
+        onPressRight={() => router.push('/my-recipes')}
+      />
 
       <View style={styles.recentBox}>
         {recentRecipes.length === 0 && !homeFeedLoading ? (
-          <Text style={styles.emptyText}>최근 레시피가 아직 없어.</Text>
+          <Text style={[styles.emptyText, { marginLeft: s(10) }]}>
+            최근 레시피가 아직 없어.
+          </Text>
         ) : (
           recentRecipes.map((r, idx) => (
             <TouchableOpacity
@@ -770,6 +823,7 @@ export default function Home() {
               style={[styles.recentCard, idx > 0 && { marginTop: s(12) }]}
               onPress={() => goToRecipeDetail(r)}
             >
+              {/* ... (기존 내부 render 로직 동일) ... */}
               <View style={styles.recentInner}>
                 <View style={styles.recentLeft}>
                   <Thumb style={styles.recentThumb} uri={r.thumbUrl} borderRadius={s(13.5)} />
