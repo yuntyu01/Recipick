@@ -4,6 +4,7 @@ from app.main_api.schemas.recipe_schema import (
     RecipeRequest,
     RecipeResponse,
     RecipeRecommendationResponse,
+    RecipeTrendingResponse,
     RecipeCommentCreateRequest,
     RecipeCommentUpdateRequest,
     RecipeCommentDeleteRequest,
@@ -27,6 +28,11 @@ def request_recipe(req: RecipeRequest):
         req.title,
         req.channel_name
     )
+
+
+@router.get("/trending", response_model=list[RecipeTrendingResponse])
+def get_trending_recipes(limit: int = Query(default=20, ge=1, le=100)):
+    return recipe_service.get_trending_recipes(limit=limit)
 
 
 @router.get("/recommendations/{category}", response_model=list[RecipeRecommendationResponse])

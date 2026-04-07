@@ -4,7 +4,6 @@ import uuid
 import time
 import boto3
 import requests
-# import yt_dlp
 from google.genai import types
 from google import genai
 from app.shared.repositories import recipe_repo
@@ -148,7 +147,7 @@ def run_etl_pipeline(video_id: str, original_url: str):
         print("[INFO] Gemini 추론 시작")
         # 구조화된 JSON 응답을 강제하기 위해 response_mime_type 지정
         response = client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model=settings.GEMINI_CHAT_MODEL,
             contents=types.Content(
                 parts=[
                     types.Part(file_data=types.FileData(file_uri=yt_url)),

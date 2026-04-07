@@ -428,6 +428,53 @@ def get_recipe_pool_for_recommendation(per_category: int = 20, categories: list 
                 "total_estimated_price": item.get("total_estimated_price"),
                 "protein_g":             nutrition.get("protein_g"),
                 "servings":              item.get("servings"),
+                "like_count":            int(item.get("like_count") or 0),
+                "comment_count":         int(item.get("comment_count") or 0),
+                "share_count":           int(item.get("share_count") or 0),
+                "created_at":            item.get("created_at") or "",
+            })
+            count += 1
+            if count >= per_category:
+                break
+    return pool
+
+
+# ─────────────────────────────────────────────────────────────
+# 트렌딩 추천 풀 수집
+# ─────────────────────────────────────────────────────────────
+
+TRENDING_CATEGORIES = ["한식", "중식", "일식", "양식", "분식", "디저트"]
+
+def get_trending_recipe_pool(per_category: int = 50) -> list:
+    """카테고리별로 최근 레시피를 수집해 트렌딩 점수 계산용 풀 반환."""
+    pool = []
+    for category in TRENDING_CATEGORIES:
+        response = recipe_table.query(
+            IndexName="CategoryIndex",
+            KeyConditionExpression=Key("category").eq(category),
+            ScanIndexForward=False,
+            Limit=per_category * 3,
+        )
+        count = 0
+        for item in response.get("Items", []):
+            if not str(item.get("PK", "")).startswith("VIDEO#"):
+                continue
+            if item.get("SK") != "INFO":
+                continue
+            if item.get("status") != "COMPLETED":
+                continue
+            video_id = str(item["PK"]).replace("VIDEO#", "")
+            pool.append({
+                "video_id":      video_id,
+                "title":         item.get("title") or "",
+                "channel_name":  item.get("channel_name") or "",
+                "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "url":           item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "category":      item.get("category") or category,
+                "like_count":    int(item.get("like_count") or 0),
+                "comment_count": int(item.get("comment_count") or 0),
+                "share_count":   int(item.get("share_count") or 0),
+                "created_at":    item.get("created_at") or "",
             })
             count += 1
             if count >= per_category:

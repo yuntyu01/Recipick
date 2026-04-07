@@ -1,7 +1,9 @@
 import boto3
 import json
+import random
 from collections import Counter
 from decimal import Decimal
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import HTTPException
 from app.shared.config import settings
@@ -234,6 +236,48 @@ def share_recipe(video_id: str, user_id: str):
         "created_at": result.get("created_at"),
         "already_exists": False
     }
+
+
+# 트렌딩 레시피 (좋아요·댓글·공유 기반 인기 점수 + 시간 감쇠)
+def get_trending_recipes(limit: int = 20) -> list:
+    def _hot_score(item: dict) -> float:
+        raw = (
+            item["like_count"] * 3
+            + item["comment_count"] * 2
+            + item["share_count"] * 5
+        )
+        try:
+            dt = datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+            age_days = max((datetime.now(timezone.utc) - dt).days, 0)
+        except Exception:
+            age_days = 0
+        return raw / (1 + age_days * 0.1)
+
+    pool = recipe_repo.get_trending_recipe_pool()
+    weights = [_hot_score(r) + 1 for r in pool]  # +1로 0점도 뽑힐 기회 부여
+
+    selected = []
+    remaining = list(zip(pool, weights))
+    for _ in range(min(limit, len(pool))):
+        items, w = zip(*remaining)
+        pick = random.choices(items, weights=w, k=1)[0]
+        selected.append(pick)
+        remaining = [(r, wt) for r, wt in remaining if r["video_id"] != pick["video_id"]]
+
+    return replace_decimals([
+        {
+            "video_id":      r["video_id"],
+            "title":         r["title"],
+            "channel_name":  r["channel_name"],
+            "thumbnail_url": r["thumbnail_url"],
+            "url":           r["url"],
+            "category":      r["category"],
+            "like_count":    r["like_count"],
+            "comment_count": r["comment_count"],
+            "share_count":   r["share_count"],
+        }
+        for r in selected
+    ])
 
 
 # 카테고리 기반 추천 레시피 목록 조회
