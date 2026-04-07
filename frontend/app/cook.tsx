@@ -132,14 +132,17 @@ export default function CookScreen() {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    const [playerStartSec, setPlayerStartSec] = useState(0);
+    const playerRef = useRef<any>(null);
 
     useEffect(() => {
         console.log('[COOK PARAMS]', params);
     }, [params]);
 
     const seekTo = (sec: number) => {
-        setPlayerStartSec(Math.max(0, Math.floor(sec)));
+        // ✅ 직접 명령 전달: playerRef가 연결되어 있다면 해당 초(sec)로 즉시 점프!
+        if (playerRef.current) {
+            playerRef.current.seekTo(Math.max(0, Math.floor(sec)), true);
+        }
     };
 
     const playVideo = () => {
@@ -407,20 +410,6 @@ export default function CookScreen() {
         [activeIdx, steps]
     );
 
-    const embedUrl = useMemo(() => {
-        if (!videoId) return '';
-
-        const query = new URLSearchParams({
-            playsinline: '1',
-            rel: '0',
-            modestbranding: '1',
-            controls: '1',
-            autoplay: isPlaying ? '1' : '0',
-            start: String(playerStartSec),
-        });
-
-        return `https://www.youtube.com/embed/${videoId}?${query.toString()}`;
-    }, [videoId, playerStartSec, isPlaying]);
 
     const VIDEO_W = SCREEN_W;
     const VIDEO_H = Math.round((VIDEO_W * 9) / 16);
@@ -453,6 +442,7 @@ export default function CookScreen() {
                     {videoId ? (
                         <>
                             <YoutubePlayer
+    ref={playerRef}
     height={VIDEO_H}
     play={isPlaying}
     videoId={videoId}
