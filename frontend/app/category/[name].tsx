@@ -37,6 +37,7 @@ type CategoryRecipeItem = {
     url: string;
     title: string;
     channelName: string;
+    channelProfileUrl?: string;
     thumbUrl?: string;
     likeCount?: string;
     commentCount?: string;
@@ -51,6 +52,7 @@ function mapRecommendationToCategoryItem(item: RecommendationItem): CategoryReci
         url: item.url || `https://www.youtube.com/watch?v=${item.video_id}`,
         title: item.title || '제목 없음',
         channelName: item.channel_name || '채널명 없음',
+        channelProfileUrl: item.channel_profile_url || '',
         thumbUrl: item.thumbnail_url || '',
         likeCount: '0',
         commentCount: '0',
@@ -191,7 +193,7 @@ export default function CategoryPage() {
                                 </Text>
 
                                 <View style={styles.channelRow}>
-                                    <Thumb style={styles.channelAvatar} borderRadius={999} />
+                                    <Thumb style={styles.channelAvatar} borderRadius={999} uri={r.channelProfileUrl || undefined} />
                                     <Text style={styles.channelName} numberOfLines={1}>
                                         {r.channelName}
                                     </Text>

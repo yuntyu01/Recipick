@@ -120,6 +120,7 @@ export type RecommendationItem = {
   title: string;
   channel_name: string;
   thumbnail_url: string;
+  channel_profile_url?: string;
   url: string;
   category: string;
 };
@@ -177,6 +178,7 @@ export type UserHistoryItem = {
   url?: string;
 
   channel_name?: string;
+  channel_profile_url?: string;
   category?: string;
   difficulty?: string;
   servings?: string | number;

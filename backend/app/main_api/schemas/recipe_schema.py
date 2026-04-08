@@ -69,6 +69,7 @@ class RecipeTrendingResponse(BaseModel):
     title: str
     channel_name: str
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
     url: str
     category: str
     like_count: int
@@ -82,6 +83,7 @@ class RecipeRecommendationResponse(BaseModel):
     title: str
     channel_name: str
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
     url: str
     category: str
 
@@ -98,6 +100,7 @@ class RecipeSearchResultResponse(BaseModel):
     title: str
     channel_name: str
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
     url: str
     category: str
 

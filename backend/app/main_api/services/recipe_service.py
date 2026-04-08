@@ -270,6 +270,7 @@ def get_trending_recipes(limit: int = 20) -> list:
             "title":         r["title"],
             "channel_name":  r["channel_name"],
             "thumbnail_url": r["thumbnail_url"],
+            "channel_profile_url": r.get("channel_profile_url") or "",
             "url":           r["url"],
             "category":      r["category"],
             "like_count":    r["like_count"],
