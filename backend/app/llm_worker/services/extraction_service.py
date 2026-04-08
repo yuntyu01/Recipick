@@ -1,15 +1,58 @@
+from __future__ import annotations
+
 import os
+import re
 import json
 import uuid
 import time
 import boto3
 import requests
-# import yt_dlp
 from google.genai import types
 from google import genai
 from app.shared.repositories import recipe_repo
 from app.shared.config import settings
 from app.shared.utils import recipe_normalizer
+
+s3 = boto3.client("s3", region_name=settings.REGION)
+CHANNEL_AVATAR_PREFIX = "channel-avatars"
+
+
+def _fetch_channel_avatar_url(video_url: str) -> str | None:
+    """YouTube 영상 페이지에서 채널 프로필 이미지 URL을 추출한다."""
+    try:
+        resp = requests.get(video_url, timeout=10, headers={"Accept-Language": "ko"})
+        resp.raise_for_status()
+        # YouTube 페이지 내 channelThumbnail JSON에서 URL 추출
+        match = re.search(
+            r'"channelThumbnail"\s*:\s*\{\s*"thumbnails"\s*:\s*\[\s*\{\s*"url"\s*:\s*"([^"]+)"',
+            resp.text,
+        )
+        if match:
+            return match.group(1).replace("s48-c-k-c0x00ffffff-no-rj", "s176-c-k-c0x00ffffff-no-rj")
+        return None
+    except Exception as e:
+        print(f"[WARN] 채널 프로필 URL 추출 실패: {e}")
+        return None
+
+
+def _upload_channel_avatar_to_s3(video_id: str, image_url: str) -> str | None:
+    """채널 프로필 이미지를 다운로드하여 S3에 업로드하고 공개 URL을 반환한다."""
+    try:
+        resp = requests.get(image_url, timeout=10)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "image/jpeg")
+        ext = "jpg" if "jpeg" in content_type or "jpg" in content_type else "png"
+        s3_key = f"{CHANNEL_AVATAR_PREFIX}/{video_id}.{ext}"
+        s3.put_object(
+            Bucket=settings.S3_BUCKET_NAME,
+            Key=s3_key,
+            Body=resp.content,
+            ContentType=content_type,
+        )
+        return f"https://{settings.S3_BUCKET_NAME}.s3.{settings.REGION}.amazonaws.com/{s3_key}"
+    except Exception as e:
+        print(f"[WARN] 채널 프로필 S3 업로드 실패: {e}")
+        return None
 
 RECIPE_SCHEMA = {
   "type": "object",
@@ -148,7 +191,7 @@ def run_etl_pipeline(video_id: str, original_url: str):
         print("[INFO] Gemini 추론 시작")
         # 구조화된 JSON 응답을 강제하기 위해 response_mime_type 지정
         response = client.models.generate_content(
-            model='gemini-3-flash-preview',
+            model=settings.GEMINI_CHAT_MODEL,
             contents=types.Content(
                 parts=[
                     types.Part(file_data=types.FileData(file_uri=yt_url)),
@@ -172,8 +215,15 @@ def run_etl_pipeline(video_id: str, original_url: str):
             recipe_repo.update_status(video_id, "NOT_RECIPE")
             return
         
+        # 4-1. 채널 프로필 이미지 S3 저장
+        channel_profile_url = None
+        avatar_url = _fetch_channel_avatar_url(yt_url)
+        if avatar_url:
+            channel_profile_url = _upload_channel_avatar_to_s3(video_id, avatar_url)
+            print(f"[INFO] 채널 프로필 저장 완료: {channel_profile_url}")
+
         # 5. DB에 저장 및 상태를 COMPLETED로 변경
-        recipe_repo.update_completed_recipe(video_id, extracted_data)
+        recipe_repo.update_completed_recipe(video_id, extracted_data, channel_profile_url=channel_profile_url)
 
         # 6. 역색인(냉장고 파먹기) 업데이트 - normalized_names 중복 제거 후 처리
         all_normalized = set()

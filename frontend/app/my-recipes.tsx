@@ -42,6 +42,7 @@ type MyRecipeItem = {
     videoId: string;
     title: string;
     channelName: string;
+    channelProfileUrl?: string;
     thumbUrl?: string;
     price?: string;
     createdAt?: string;
@@ -86,6 +87,7 @@ function mapHistoryItemToMyRecipe(item: any, index: number): MyRecipeItem {
 
         // 백엔드 필드명: channel_name
         channelName: item.channel_name || '채널명 없음',
+        channelProfileUrl: item.channel_profile_url || '',
 
         // 백엔드 필드명: thumbnail_url
         thumbUrl: item.thumbnail_url || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''),
@@ -276,7 +278,7 @@ export default function MyRecipesPage() {
                                 </Text>
 
                                 <View style={styles.channelRow}>
-                                    <Thumb style={styles.channelAvatar} borderRadius={999} />
+                                    <Thumb style={styles.channelAvatar} borderRadius={999} uri={r.channelProfileUrl || undefined} />
                                     <Text style={styles.channelName} numberOfLines={1}>
                                         {r.channelName}
                                     </Text>

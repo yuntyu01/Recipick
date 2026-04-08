@@ -49,32 +49,39 @@ def save_initial_recipe(video_id: str, original_url: str, sharer_nickname: str, 
     return thumbnail_url
 
 # 분석 완료 데이터 반영 및 COMPLETED 상태 변경
-def update_completed_recipe(video_id: str, extracted_data: dict):
-    recipe_table.update_item(
-        Key={'PK': f'VIDEO#{video_id}', 'SK': 'INFO'},
-        UpdateExpression="""
-            SET #st = :status_val, 
-                category = :cat_val, 
+def update_completed_recipe(video_id: str, extracted_data: dict, channel_profile_url: str = None):
+    update_expr = """
+            SET #st = :status_val,
+                category = :cat_val,
                 difficulty = :diff_val,
                 servings = :servings_val,
                 total_estimated_price = :price_val,
                 total_calorie = :cal_val,
                 nutrition_details = :nutri_val,
-                ingredients = :ing_val, 
+                ingredients = :ing_val,
                 steps = :steps_val
-        """,
+    """
+    expr_values = {
+        ":status_val": "COMPLETED",
+        ":cat_val": extracted_data.get("category"),
+        ":diff_val": extracted_data.get("difficulty"),
+        ":servings_val": extracted_data.get("servings"),
+        ":price_val": extracted_data.get("total_estimated_price"),
+        ":cal_val": extracted_data.get("total_calorie"),
+        ":nutri_val": extracted_data.get("nutrition_details"),
+        ":ing_val": extracted_data.get("ingredients"),
+        ":steps_val": extracted_data.get("steps"),
+    }
+
+    if channel_profile_url:
+        update_expr += ", channel_profile_url = :cp_val"
+        expr_values[":cp_val"] = channel_profile_url
+
+    recipe_table.update_item(
+        Key={'PK': f'VIDEO#{video_id}', 'SK': 'INFO'},
+        UpdateExpression=update_expr,
         ExpressionAttributeNames={"#st": "status"},
-        ExpressionAttributeValues={
-            ":status_val": "COMPLETED",
-            ":cat_val": extracted_data.get("category"),
-            ":diff_val": extracted_data.get("difficulty"),
-            ":servings_val": extracted_data.get("servings"),
-            ":price_val": extracted_data.get("total_estimated_price"),
-            ":cal_val": extracted_data.get("total_calorie"),
-            ":nutri_val": extracted_data.get("nutrition_details"),
-            ":ing_val": extracted_data.get("ingredients"),
-            ":steps_val": extracted_data.get("steps")
-        }
+        ExpressionAttributeValues=expr_values,
     )
 
 # 레시피 처리 상태 갱신
@@ -428,6 +435,54 @@ def get_recipe_pool_for_recommendation(per_category: int = 20, categories: list 
                 "total_estimated_price": item.get("total_estimated_price"),
                 "protein_g":             nutrition.get("protein_g"),
                 "servings":              item.get("servings"),
+                "like_count":            int(item.get("like_count") or 0),
+                "comment_count":         int(item.get("comment_count") or 0),
+                "share_count":           int(item.get("share_count") or 0),
+                "created_at":            item.get("created_at") or "",
+            })
+            count += 1
+            if count >= per_category:
+                break
+    return pool
+
+
+# ─────────────────────────────────────────────────────────────
+# 트렌딩 추천 풀 수집
+# ─────────────────────────────────────────────────────────────
+
+TRENDING_CATEGORIES = ["한식", "중식", "일식", "양식", "분식", "디저트"]
+
+def get_trending_recipe_pool(per_category: int = 50) -> list:
+    """카테고리별로 최근 레시피를 수집해 트렌딩 점수 계산용 풀 반환."""
+    pool = []
+    for category in TRENDING_CATEGORIES:
+        response = recipe_table.query(
+            IndexName="CategoryIndex",
+            KeyConditionExpression=Key("category").eq(category),
+            ScanIndexForward=False,
+            Limit=per_category * 3,
+        )
+        count = 0
+        for item in response.get("Items", []):
+            if not str(item.get("PK", "")).startswith("VIDEO#"):
+                continue
+            if item.get("SK") != "INFO":
+                continue
+            if item.get("status") != "COMPLETED":
+                continue
+            video_id = str(item["PK"]).replace("VIDEO#", "")
+            pool.append({
+                "video_id":      video_id,
+                "title":         item.get("title") or "",
+                "channel_name":  item.get("channel_name") or "",
+                "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "channel_profile_url": item.get("channel_profile_url") or "",
+                "url":           item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "category":      item.get("category") or category,
+                "like_count":    int(item.get("like_count") or 0),
+                "comment_count": int(item.get("comment_count") or 0),
+                "share_count":   int(item.get("share_count") or 0),
+                "created_at":    item.get("created_at") or "",
             })
             count += 1
             if count >= per_category:
@@ -524,6 +579,7 @@ def batch_get_recipes_info(video_ids: List[str]) -> List[dict]:
             'title': item.get('title') or '',
             'channel_name': item.get('channel_name') or '',
             'thumbnail_url': item.get('thumbnail_url') or f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
+            'channel_profile_url': item.get('channel_profile_url') or '',
             'url': item.get('original_url') or f'https://www.youtube.com/watch?v={video_id}',
             'category': item.get('category') or '',
             'ingredients': item.get('ingredients', []),
@@ -561,6 +617,7 @@ def list_recommended_videos_by_category(category: str, limit: int = 20):
                 "title": item.get("title") or "",
                 "channel_name": item.get("channel_name") or "",
                 "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "channel_profile_url": item.get("channel_profile_url") or "",
                 "url": item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
                 "category": item.get("category") or category,
             }

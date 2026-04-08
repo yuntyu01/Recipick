@@ -61,6 +61,7 @@ def add_user_history(
         "created_at": event_time,
         "saved_at": event_time,
         "channel_name": recipe.get("channel_name"),
+        "channel_profile_url": recipe.get("channel_profile_url") or "",
         "category": recipe.get("category"),
         "difficulty": recipe.get("difficulty"),
         "servings": recipe.get("servings"),

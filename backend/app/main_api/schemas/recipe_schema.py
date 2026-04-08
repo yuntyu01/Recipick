@@ -63,12 +63,27 @@ class RecipeActionResponse(BaseModel):
     already_exists: bool = False  # 중복 액션 여부
 
 
+# 트렌딩 레시피 단건 응답
+class RecipeTrendingResponse(BaseModel):
+    video_id: str
+    title: str
+    channel_name: str
+    thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
+    url: str
+    category: str
+    like_count: int
+    comment_count: int
+    share_count: int
+
+
 # 카테고리 기반 추천 레시피 단건 응답
 class RecipeRecommendationResponse(BaseModel):
     video_id: str
     title: str
     channel_name: str
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
     url: str
     category: str
 
@@ -85,6 +100,7 @@ class RecipeSearchResultResponse(BaseModel):
     title: str
     channel_name: str
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
     url: str
     category: str
 

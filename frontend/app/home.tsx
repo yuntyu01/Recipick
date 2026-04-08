@@ -79,6 +79,7 @@ type HomeRecipeItem = {
   url: string;
   title: string;
   channelName: string;
+  channelProfileUrl?: string;
   thumbUrl?: string;
   category?: string;
   totalEstimatedPrice?: string;
@@ -142,6 +143,7 @@ function mapHistoryItemToHome(item: UserHistoryItem): HomeRecipeItem {
     url,
     title: item.recipe_title || item.title || '제목 없음',
     channelName: item.channel_name || '채널명 없음',
+    channelProfileUrl: item.channel_profile_url || '',
     thumbUrl: item.thumbnail_url || '',
     category: item.category || '',
     totalEstimatedPrice: formatWon(item.total_estimated_price),
@@ -161,6 +163,7 @@ function mapRecommendationItemToHome(item: RecommendationItem): HomeRecipeItem {
     url: item.url || `https://www.youtube.com/watch?v=${item.video_id}`,
     title: item.title || '제목 없음',
     channelName: item.channel_name || '채널명 없음',
+    channelProfileUrl: item.channel_profile_url || '',
     thumbUrl: item.thumbnail_url || '',
     category: item.category || '',
     totalEstimatedPrice: '',
@@ -814,6 +817,7 @@ export default function Home() {
                           {r.title}
                         </Text>
 
+<<<<<<< HEAD
                         <View style={styles.channelRow2}>
                           {/* 채널 아바타가 있으면 uri를 넣으세요 */}
                           <Image source={{ uri: r.channelProfileUrl }} style={styles.channelAvatar} borderRadius={999} />
@@ -821,6 +825,14 @@ export default function Home() {
                             {r.channelName}
                           </Text>
                         </View>
+=======
+                  <View style={styles.channelRow2}>
+                    <Thumb style={styles.channelAvatar} uri={r.channelProfileUrl || undefined} borderRadius={999} />
+                    <Text style={styles.channelName} numberOfLines={1}>
+                      {r.channelName}
+                    </Text>
+                  </View>
+>>>>>>> 0b4c143bcf7059579d03328535c7ec1b39d71ff2
 
                         <View style={styles.metaRow}>
                           <Meta icon="heart-outline" text={String(r.likeCount || 0)} />

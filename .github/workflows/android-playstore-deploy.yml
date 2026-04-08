@@ -98,12 +98,6 @@ jobs:
             -Pandroid.versionCode=${ANDROID_VERSION_CODE} \
             ${VERSION_NAME_ARG}
 
-      - name: Upload AAB artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release
-          path: ./frontend/android/app/build/outputs/bundle/release/app-release.aab
-
       - name: Upload AAB to Play Console
         uses: r0adkll/upload-google-play@v1
         with:

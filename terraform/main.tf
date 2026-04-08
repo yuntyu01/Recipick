@@ -250,6 +250,11 @@ resource "aws_iam_role_policy" "llm_worker_policy" {
         Effect   = "Allow"
         Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"] # SQS 소비 권한 필수
         Resource = aws_sqs_queue.recipe_queue.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"] # 채널 프로필 이미지 S3 업로드 권한
+        Resource = "${aws_s3_bucket.static.arn}/channel-avatars/*"
       }
     ]
   })
