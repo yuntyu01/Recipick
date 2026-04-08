@@ -448,6 +448,25 @@ export async function getTrendingRecipes(limit = 20): Promise<TrendingRecipe[]> 
 }
 
 /* =========================
+ * latest API (최신 레시피)
+ * ========================= */
+
+export interface LatestRecipe {
+  video_id: string;
+  title: string;
+  channel_name: string;
+  thumbnail_url: string;
+  channel_profile_url?: string;
+  url: string;
+  category: string;
+  created_at: string;
+}
+
+export async function getLatestRecipes(limit = 20): Promise<LatestRecipe[]> {
+  return request<LatestRecipe[]>(`/api/recipes/latest?limit=${limit}`, { method: 'GET' });
+}
+
+/* =========================
  * history API
  * ========================= */
 

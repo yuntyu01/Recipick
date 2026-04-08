@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { getTrendingRecipes, TrendingRecipe } from '../lib/api';
+import { getLatestRecipes, LatestRecipe } from '../lib/api';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter } from 'expo-router';
@@ -203,7 +203,6 @@ export default function Home() {
   const [myRecipes, setMyRecipes] = useState<HomeRecipeItem[]>([]);
   const [recommendRecipes, setRecommendRecipes] = useState<HomeRecipeItem[]>([]);
   const [recentRecipes, setRecentRecipes] = useState<HomeRecipeItem[]>([]);
-  const [trendingRecipes, setTrendingRecipes] = useState<HomeRecipeItem[]>([]);
 
   const [homeFeedLoading, setHomeFeedLoading] = useState(false);
   const [homeFeedError, setHomeFeedError] = useState<string | null>(null);
@@ -391,17 +390,16 @@ export default function Home() {
 
       const recommendCategory: RecipeCategory = '한식';
 
-      const [historyResult, recommendResult, trendingResult] = await Promise.allSettled([
+      const [historyResult, recommendResult, latestResult] = await Promise.allSettled([
         currentUserId ? getUserHistory(currentUserId, 50) : Promise.resolve([]),
         getRecommendationsByCategory(recommendCategory),
-        getTrendingRecipes(10), // 여기서 세 번째로 요청을 보내고 있으므로 위에서도 세 번째 변수로 받아야 함
+        getLatestRecipes(10),
       ]);
 
       // 1. 히스토리 처리
       if (historyResult.status === 'fulfilled') {
         const allHistory = normalizeUserHistory(historyResult.value).map(mapHistoryItemToHome);
         setMyRecipes(allHistory.slice(0, 10));
-        setRecentRecipes(allHistory.slice(0, 5));
       }
 
       // 2. 추천 레시피 처리
@@ -410,21 +408,20 @@ export default function Home() {
         setRecommendRecipes(recommendItems.slice(0, 10));
       }
 
-      if (trendingResult.status === 'fulfilled') {
-        const trendingItems = (trendingResult.value as TrendingRecipe[]).map(item => ({
-          id: `trending-${item.video_id}`,
+      // 3. 최신 레시피 처리
+      if (latestResult.status === 'fulfilled') {
+        const latestItems = (latestResult.value as LatestRecipe[]).map(item => ({
+          id: `latest-${item.video_id}`,
           source: 'recommend' as const,
           videoId: item.video_id,
           url: item.url,
           title: item.title,
           channelName: item.channel_name,
+          channelProfileUrl: item.channel_profile_url || '',
           thumbUrl: item.thumbnail_url,
-          likeCount: String(item.like_count || '0'),
-          commentCount: String(item.comment_count || '0'),
-          shareCount: String(item.share_count || '0'),
           recipeData: null,
         }));
-        setTrendingRecipes(trendingItems);
+        setRecentRecipes(latestItems);
       }
 
     } catch (e: any) {
@@ -770,7 +767,7 @@ export default function Home() {
 
 
       <SectionHeader
-        title="최근 많이 사용한 레시피"
+        title="최근 레시피"
         onPressRight={() => router.push('/my-recipes')}
       />
 
