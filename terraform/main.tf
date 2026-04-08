@@ -115,6 +115,37 @@ resource "aws_s3_bucket" "static" {
   bucket = "recipick-static-bucket"
 }
 
+# 이미지 경로(채널 아바타, 프로필 사진)에 대한 퍼블릭 읽기 허용
+resource "aws_s3_bucket_public_access_block" "static" {
+  bucket = aws_s3_bucket.static.id
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = false   # 버킷 정책으로 퍼블릭 GET 허용
+  restrict_public_buckets = false
+}
+
+resource "aws_s3_bucket_policy" "static_public_read" {
+  bucket     = aws_s3_bucket.static.id
+  depends_on = [aws_s3_bucket_public_access_block.static]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadImages"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource = [
+          "${aws_s3_bucket.static.arn}/channel-avatars/*",
+          "${aws_s3_bucket.static.arn}/profile-images/*"
+        ]
+      }
+    ]
+  })
+}
+
 # 프론트엔드가 presigned URL로 S3에 직접 PUT 업로드할 수 있도록 CORS 허용
 resource "aws_s3_bucket_cors_configuration" "static" {
   bucket = aws_s3_bucket.static.id

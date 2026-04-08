@@ -580,32 +580,15 @@ export default function Home() {
   // Home.tsx 내의 createUserHistorySafe 함수 수정
 
   const createUserHistorySafe = async (resolvedUserId: string, recipe: RecipeData) => {
-    // 💡 추가: 유저 ID가 없으면 시도조차 하지 않음 (500 에러 방지)
     if (!resolvedUserId) return;
 
     try {
-      const payload = {
-        video_id: videoMeta?.videoId || recipe.video_id || '',
-        title: videoMeta?.title || '제목 없음',
-        channel_name: videoMeta?.channelName || '채널명 없음',
-        thumbnail_url: videoMeta?.thumbnailUrl || '',
-        original_url: link,
-        // 💡 중요: recipe_data 내부의 불필요한 필드를 제거하거나 형식을 맞춤
-        recipe_data: {
-          ...recipe,
-          steps: recipe.steps || [],
-          ingredients: recipe.ingredients || []
-        },
-        category: recipe.category || '한식',
-        total_estimated_price: String(recipe.total_estimated_price || '0'),
-      };
-
-      console.log('[서버 저장 시도]:', payload.title);
+      const payload = buildUserHistoryPayloadFromRecipe(recipe);
+      console.log('[서버 저장 시도]:', payload.recipe_title);
       const response = await createUserHistory(resolvedUserId, payload);
       console.log('[저장 성공]:', response);
     } catch (error: any) {
-      // 500 에러가 나도 앱이 죽지 않게 처리
-      console.warn('[저장 실패] 서버 500 오류 가능성:', error.message);
+      console.warn('[저장 실패]:', error.message);
     }
   };
 
