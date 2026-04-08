@@ -281,6 +281,11 @@ def get_trending_recipes(limit: int = 20) -> list:
     ])
 
 
+# 전체 레시피 최신순 조회
+def get_latest_recipes(limit: int = 20) -> list:
+    return replace_decimals(recipe_repo.get_latest_recipes(limit=limit))
+
+
 # 카테고리 기반 추천 레시피 목록 조회
 def get_recommended_videos_by_category(category: str, limit: int = 20):
     if category not in SUPPORTED_RECIPE_CATEGORIES:

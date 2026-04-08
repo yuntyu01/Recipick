@@ -12,6 +12,7 @@ from app.main_api.schemas.recipe_schema import (
     RecipeActionResponse,
     RecipeSearchResultResponse,
     RecipeSearchResponse,
+    RecipeLatestResponse,
 )
 from app.main_api.dependencies.auth import get_current_auth_user, get_optional_auth_user
 from app.main_api.services import recipe_service
@@ -33,6 +34,11 @@ def request_recipe(req: RecipeRequest):
 @router.get("/trending", response_model=list[RecipeTrendingResponse])
 def get_trending_recipes(limit: int = Query(default=20, ge=1, le=100)):
     return recipe_service.get_trending_recipes(limit=limit)
+
+
+@router.get("/latest", response_model=list[RecipeLatestResponse])
+def get_latest_recipes(limit: int = Query(default=20, ge=1, le=100)):
+    return recipe_service.get_latest_recipes(limit=limit)
 
 
 @router.get("/recommendations/{category}", response_model=list[RecipeRecommendationResponse])

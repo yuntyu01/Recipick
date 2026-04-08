@@ -491,6 +491,40 @@ def get_trending_recipe_pool(per_category: int = 50) -> list:
 
 
 # ─────────────────────────────────────────────────────────────
+# 전체 레시피 최신순 조회 (StatusCreatedIndex GSI)
+# ─────────────────────────────────────────────────────────────
+
+def get_latest_recipes(limit: int = 20) -> list:
+    """COMPLETED 레시피를 분석 최신순으로 반환."""
+    response = recipe_table.query(
+        IndexName="StatusCreatedIndex",
+        KeyConditionExpression=Key("status").eq("COMPLETED"),
+        ScanIndexForward=False,
+        Limit=limit * 3,
+    )
+    results = []
+    for item in response.get("Items", []):
+        if not str(item.get("PK", "")).startswith("VIDEO#"):
+            continue
+        if item.get("SK") != "INFO":
+            continue
+        video_id = str(item["PK"]).replace("VIDEO#", "")
+        results.append({
+            "video_id":            video_id,
+            "title":               item.get("title") or "",
+            "channel_name":        item.get("channel_name") or "",
+            "thumbnail_url":       item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+            "channel_profile_url": item.get("channel_profile_url") or "",
+            "url":                 item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+            "category":            item.get("category") or "",
+            "created_at":          item.get("created_at") or "",
+        })
+        if len(results) >= limit:
+            break
+    return results
+
+
+# ─────────────────────────────────────────────────────────────
 # 냉장고 파먹기 (역색인 + 카운터)
 # ─────────────────────────────────────────────────────────────
 
