@@ -62,7 +62,24 @@ def _install_test_stubs():
             def __and__(self, other):
                 return self
 
+        class _FakeAttr:
+            def __init__(self, name):
+                self.name = name
+
+            def eq(self, value):
+                return self
+
+            def not_exists(self):
+                return self
+
+            def __and__(self, other):
+                return self
+
+            def __or__(self, other):
+                return self
+
         fake_boto3_conditions.Key = _FakeKey
+        fake_boto3_conditions.Attr = _FakeAttr
         sys.modules["boto3.dynamodb.conditions"] = fake_boto3_conditions
 
     if "botocore.exceptions" not in sys.modules:

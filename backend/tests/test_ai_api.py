@@ -73,6 +73,14 @@ def test_ai_ask_rate_limited(client, monkeypatch):
         "ai_ask_count": limit,
         "ttl_expire_at": 1711756799,
     })
+    monkeypatch.setattr(recipe_repo, "get_recipe", lambda video_id: {
+        "title": "계란말이",
+        "category": "한식",
+        "ingredients": [{"name": "계란"}],
+        "steps": [{"desc": "팬에 붓기"}],
+    })
+    monkeypatch.setattr(ai_service, "genai", types.SimpleNamespace(Client=_FakeClient))
+    ai_service.settings.GEMINI_API_KEY = "test-key"
 
     response = client.post(
         "/api/ai/ask",
