@@ -76,7 +76,13 @@ resource "aws_dynamodb_table" "recipes" {
     type = "S"
   }
 
-  # GSI 1, 2 공통 정렬 키
+  # GSI 3 용도 (전체 최신순 조회)
+  attribute {
+    name = "status"
+    type = "S"
+  }
+
+  # GSI 1, 2, 3 공통 정렬 키
   attribute {
     name = "created_at"
     type = "S"
@@ -88,6 +94,17 @@ resource "aws_dynamodb_table" "recipes" {
   global_secondary_index {
     name      = "CategoryIndex"
     hash_key  = "category"
+    range_key = "created_at"
+
+    projection_type = "ALL"
+  }
+
+  # ---------------------------------------------------------------------------
+  # GSI 3: StatusCreatedIndex (전체 레시피 최신순 조회 용)
+  # ---------------------------------------------------------------------------
+  global_secondary_index {
+    name      = "StatusCreatedIndex"
+    hash_key  = "status"
     range_key = "created_at"
 
     projection_type = "ALL"

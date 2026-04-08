@@ -54,6 +54,7 @@ class UserHistoryResponse(BaseModel):
     created_at: str
     saved_at: str
     channel_name: Optional[str] = None
+    channel_profile_url: Optional[str] = None
     category: Optional[str] = None
     difficulty: Optional[str] = None
     servings: Optional[int] = None
