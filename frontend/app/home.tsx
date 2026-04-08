@@ -817,22 +817,13 @@ export default function Home() {
                           {r.title}
                         </Text>
 
-<<<<<<< HEAD
-                        <View style={styles.channelRow2}>
-                          {/* 채널 아바타가 있으면 uri를 넣으세요 */}
-                          <Image source={{ uri: r.channelProfileUrl }} style={styles.channelAvatar} borderRadius={999} />
-                          <Text style={styles.channelName} numberOfLines={1}>
-                            {r.channelName}
-                          </Text>
-                        </View>
-=======
-                  <View style={styles.channelRow2}>
-                    <Thumb style={styles.channelAvatar} uri={r.channelProfileUrl || undefined} borderRadius={999} />
-                    <Text style={styles.channelName} numberOfLines={1}>
-                      {r.channelName}
-                    </Text>
-                  </View>
->>>>>>> 0b4c143bcf7059579d03328535c7ec1b39d71ff2
+<View style={styles.channelRow2}>
+  {/* 채널 아바타가 있으면 uri를 넣으세요 */}
+  <Image source={{ uri: r.channelProfileUrl }} style={styles.channelAvatar} borderRadius={999} />
+  <Text style={styles.channelName} numberOfLines={1}>
+    {r.channelName}
+  </Text>
+</View>
 
                         <View style={styles.metaRow}>
                           <Meta icon="heart-outline" text={String(r.likeCount || 0)} />
