@@ -421,6 +421,34 @@ export function normalizeRecommendations(response: any): RecommendationItem[] {
 }
 
 /* =========================
+ * trending API (인기 레시피)
+ * ========================= */
+
+// 1. 인기 레시피 타입 정의
+export interface TrendingRecipe {
+  video_id: string;
+  title: string;
+  channel_name: string;
+  thumbnail_url: string;
+  url: string;
+  category: string;
+  like_count: number | string;
+  comment_count: number | string;
+  share_count: number | string;
+}
+
+// 2. 인기 레시피 가져오기 함수
+export async function getTrendingRecipes(limit = 20): Promise<TrendingRecipe[]> {
+  // 인증이 필요 없으므로 token은 생략합니다.
+  // 이전에 정의하신 request 함수를 그대로 활용합니다.
+  const response = await request<TrendingRecipe[]>(`/api/recipes/trending?limit=${limit}`, {
+    method: 'GET',
+  });
+
+  return response;
+}
+
+/* =========================
  * history API
  * ========================= */
 
