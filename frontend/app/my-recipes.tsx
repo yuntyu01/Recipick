@@ -82,8 +82,7 @@ function mapHistoryItemToMyRecipe(item: any, index: number): MyRecipeItem {
         id: `history-${videoId}-${index}`,
         videoId,
 
-        // [중요!] 백엔드 테스트 코드에서 'recipe_title'이라는 필드명을 사용함
-        title: item.recipe_title || item.title || '제목 없음',
+        title: item.title || '제목 없음',
 
         // 백엔드 필드명: channel_name
         channelName: item.channel_name || '채널명 없음',

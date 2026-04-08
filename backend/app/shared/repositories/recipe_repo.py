@@ -179,7 +179,7 @@ def create_comment(
         "content": content,
         "like_count": like_count,
         "created_at": now,
-        "recipe_title": recipe.get("title") if recipe else None,
+        "title": recipe.get("title") if recipe else None,
         "thumbnail_url": recipe.get("thumbnail_url") if recipe else None,
     }
     if anonymous_number is not None:
@@ -305,7 +305,7 @@ def create_like(video_id: str, user_id: str):
                 "SK": f"LIKE#{user_id}",
                 "user_id": user_id,
                 "created_at": now,
-                "recipe_title": recipe.get("title") if recipe else None,
+                "title": recipe.get("title") if recipe else None,
                 "thumbnail_url": recipe.get("thumbnail_url") if recipe else None
             },
             ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)"
@@ -351,7 +351,7 @@ def create_bookmark(video_id: str, user_id: str):
                 "SK": f"BOOKMARK#{user_id}",
                 "user_id": user_id,
                 "created_at": now,
-                "recipe_title": recipe.get("title") if recipe else None,
+                "title": recipe.get("title") if recipe else None,
                 "thumbnail_url": recipe.get("thumbnail_url") if recipe else None
             },
             ConditionExpression="attribute_not_exists(PK) AND attribute_not_exists(SK)"
@@ -385,7 +385,7 @@ def create_share(video_id: str, user_id: str):
             "SK": share_sk,
             "user_id": user_id,
             "created_at": now,
-            "recipe_title": recipe.get("title") if recipe else None,
+            "title": recipe.get("title") if recipe else None,
             "thumbnail_url": recipe.get("thumbnail_url") if recipe else None
         }
     )

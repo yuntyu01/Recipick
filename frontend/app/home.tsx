@@ -141,7 +141,7 @@ function mapHistoryItemToHome(item: UserHistoryItem): HomeRecipeItem {
     source: 'history',
     videoId,
     url,
-    title: item.recipe_title || item.title || '제목 없음',
+    title: item.title || '제목 없음',
     channelName: item.channel_name || '채널명 없음',
     channelProfileUrl: item.channel_profile_url || '',
     thumbUrl: item.thumbnail_url || '',
@@ -592,7 +592,7 @@ export default function Home() {
 
     try {
       const payload = buildUserHistoryPayloadFromRecipe(recipe);
-      console.log('[서버 저장 시도]:', payload.recipe_title);
+      console.log('[서버 저장 시도]:', payload.title);
       const response = await createUserHistory(resolvedUserId, payload);
       console.log('[저장 성공]:', response);
     } catch (error: any) {

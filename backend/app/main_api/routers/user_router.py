@@ -66,7 +66,7 @@ def create_user_history(user_id: str, req: UserHistoryCreateRequest):
     return user_service.create_user_history(
         user_id=user_id,
         video_id=req.video_id,
-        recipe_title=req.recipe_title,
+        title=req.title,
         thumbnail_url=req.thumbnail_url,
         created_at=req.created_at
     )

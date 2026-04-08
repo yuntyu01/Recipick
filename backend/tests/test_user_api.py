@@ -49,9 +49,9 @@ def test_post_user_history(client, monkeypatch):
     monkeypatch.setattr(
         user_router.user_service,
         "create_user_history",
-        lambda user_id, video_id, recipe_title, thumbnail_url, created_at=None: {
+        lambda user_id, video_id, title, thumbnail_url, created_at=None: {
             "video_id": video_id,
-            "recipe_title": recipe_title,
+            "title": title,
             "thumbnail_url": thumbnail_url,
             "created_at": created_at or "2026-02-26T00:00:00Z",
             "saved_at": created_at or "2026-02-26T00:00:00Z",
@@ -72,7 +72,7 @@ def test_post_user_history(client, monkeypatch):
         "/api/users/user123/history",
         json={
             "video_id": "abc123",
-            "recipe_title": "비빔밥",
+            "title": "비빔밥",
             "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
         },
     )
@@ -91,7 +91,7 @@ def test_get_user_history(client, monkeypatch):
         lambda user_id, limit=20: [
             {
                 "video_id": "abc123",
-                "recipe_title": "비빔밥",
+                "title": "비빔밥",
                 "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
                 "created_at": "2026-02-26T00:00:00Z",
                 "saved_at": "2026-02-26T00:00:00Z",
@@ -127,7 +127,7 @@ def test_get_user_activities(client, monkeypatch):
                 "video_id": "abc123",
                 "activity_type": "LIKE",
                 "created_at": "2026-02-26T00:00:00Z",
-                "recipe_title": "비빔밥",
+                "title": "비빔밥",
                 "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
                 "nickname": None,
                 "content": None,

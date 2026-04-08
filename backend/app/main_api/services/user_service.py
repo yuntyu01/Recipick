@@ -78,14 +78,14 @@ def get_user_profile(user_id: str):
 def create_user_history(
     user_id: str,
     video_id: str,
-    recipe_title: str,
+    title: str,
     thumbnail_url: str,
     created_at: Optional[str] = None
 ):
     item = user_repo.add_user_history(
         user_id=user_id,
         video_id=video_id,
-        recipe_title=recipe_title,
+        title=title,
         thumbnail_url=thumbnail_url,
         created_at=created_at
     )
@@ -95,6 +95,9 @@ def create_user_history(
 # 유저 최근 사용 이력 조회
 def get_user_history(user_id: str, limit: int = 20):
     items = user_repo.list_user_history(user_id=user_id, limit=limit)
+    for item in items:
+        if "title" not in item and "recipe_title" in item:
+            item["title"] = item.pop("recipe_title")
     return _replace_decimals(items)
 
 
@@ -111,7 +114,7 @@ def get_user_activities(user_id: str, limit: int = 20):
                 "video_id": item.get("PK", "").replace("VIDEO#", ""),
                 "activity_type": activity_type,
                 "created_at": item.get("created_at"),
-                "recipe_title": item.get("recipe_title"),
+                "title": item.get("title") or item.get("recipe_title"),
                 "thumbnail_url": item.get("thumbnail_url"),
                 "nickname": item.get("nickname"),
                 "content": item.get("content"),

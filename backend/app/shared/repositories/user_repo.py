@@ -41,7 +41,7 @@ def upsert_user_profile(user_id: str, nickname: str, profile_image: Optional[str
 def add_user_history(
     user_id: str,
     video_id: str,
-    recipe_title: str,
+    title: str,
     thumbnail_url: str,
     created_at: Optional[str] = None
 ):
@@ -56,7 +56,7 @@ def add_user_history(
         "PK": f"USER#{user_id}",
         "SK": f"HISTORY#{event_time}",
         "video_id": video_id,
-        "recipe_title": recipe.get("title") or recipe_title,
+        "title": recipe.get("title") or title,
         "thumbnail_url": recipe.get("thumbnail_url") or thumbnail_url,
         "created_at": event_time,
         "saved_at": event_time,

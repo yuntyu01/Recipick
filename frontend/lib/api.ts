@@ -146,7 +146,7 @@ export type UserHistoryRecipeData = {
 
 export type UserHistoryCreateRequest = {
   video_id: string;
-  recipe_title: string;
+  title: string;
   thumbnail_url?: string;
   original_url?: string;
   url?: string;
@@ -171,7 +171,6 @@ export type UserHistoryCreateRequest = {
 export type UserHistoryItem = {
   video_id: string;
 
-  recipe_title?: string;
   title?: string;
   thumbnail_url?: string;
   original_url?: string;
@@ -529,7 +528,7 @@ export function buildUserHistoryPayloadFromRecipe(
 ): UserHistoryCreateRequest {
   return {
     video_id: String(recipe.video_id), // 확실하게 문자열로 변환
-    recipe_title: String(recipe.title),
+    title: String(recipe.title),
     thumbnail_url: recipe.thumbnail_url || '',
     original_url: recipe.original_url || '',
     url: recipe.original_url || '',
