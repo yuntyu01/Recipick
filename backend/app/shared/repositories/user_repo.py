@@ -1,7 +1,7 @@
 import boto3
 from datetime import datetime, timezone
 from typing import Optional
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from app.shared.config import settings
 
 dynamodb = boto3.resource('dynamodb', region_name=settings.REGION)
@@ -45,6 +45,15 @@ def add_user_history(
     thumbnail_url: str,
     created_at: Optional[str] = None
 ):
+    # 중복 체크: 같은 user_id + video_id가 이미 있으면 저장하지 않음
+    existing = recipe_table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
+        FilterExpression=Attr("video_id").eq(video_id),
+        Limit=1,
+    )
+    if existing.get("Items"):
+        return existing["Items"][0]
+
     event_time = created_at or _utc_now_iso()
     recipe = recipe_table.get_item(
         Key={

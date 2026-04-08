@@ -43,13 +43,17 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
-      await SecureStore.deleteItemAsync("accessToken");
-      await SecureStore.deleteItemAsync("access_token");
-      await SecureStore.deleteItemAsync("refreshToken");
-      await SecureStore.deleteItemAsync("refresh_token");
-      await SecureStore.deleteItemAsync("userId");
-      await SecureStore.deleteItemAsync("nickname");
-      await SecureStore.deleteItemAsync("profileImage");
+      // 이미 로그인된 Firebase 유저가 있으면 재사용
+      const existingUser = auth.currentUser;
+      if (existingUser) {
+        const firebaseIdToken = await existingUser.getIdToken(true);
+        await SecureStore.setItemAsync("hasOnboarded", "true");
+        await SecureStore.setItemAsync("devPreviewMode", "true");
+        await SecureStore.setItemAsync("accessToken", firebaseIdToken);
+        await SecureStore.setItemAsync("userId", existingUser.uid);
+        router.replace("/home");
+        return;
+      }
 
       const userCredential = await signInAnonymously(auth);
       const firebaseUser = userCredential.user;

@@ -234,8 +234,13 @@ export default function Home() {
 
   const getCurrentUserId = async () => {
   try {
+    // SecureStore에 저장된 userId를 먼저 확인
+    const storedId = await SecureStore.getItemAsync('userId');
+    if (storedId) return storedId;
+
+    // 없으면 백엔드에서 가져옴
     const token = await getAccessToken();
-    if (!token) return null; // 토큰 없으면 바로 null 반환
+    if (!token) return null;
 
     const me = await getMeWithToken(token);
     return getUserIdFromMe(me);
