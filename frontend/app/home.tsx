@@ -34,7 +34,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -622,242 +623,195 @@ export default function Home() {
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={[styles.topBar, { height: s(150)}]}>
-        <Text style={[styles.logo, { top: logoTop }]}>Recipick!</Text>
-
-        <TouchableOpacity
-          onPress={() => router.push('/mypage')}
-          hitSlop={10}
-          style={[
-            styles.profileBtn,
-            {
-              top: profileTop,
-              left: s(FIGMA_PROFILE_L),
-              width: s(FIGMA_PROFILE_SIZE),
-              height: s(FIGMA_PROFILE_SIZE),
-            },
-          ]}
-        >
-          <Ionicons name="person" size={18} color="#111" />
-        </TouchableOpacity>
-
-
-      </View>
-
-      {showCreatePanel && (
-        <View style={styles.createPanelWrap}>
-          <View style={styles.createPanel}>
-            {/* 닫기 버튼 (우측 상단) */}
-            <TouchableOpacity
-              onPress={handleClosePanel}
-              style={styles.createCloseNew}
-            >
-              <Ionicons name="close-circle" size={24} color="#D1D1D1" />
-            </TouchableOpacity>
-
-            {/* 입력창 (중앙 정렬) */}
-            <TextInput
-              value={link}
-              onChangeText={handleLinkChange}
-              placeholder="링크를 붙여넣으면 AI가 레시피로 정리해줘요!"
-              placeholderTextColor="#9AA8A7"
-              style={styles.createInputNew}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            {/* 안내 문구 (불렛 포인트) */}
-            <View style={styles.createNoticeNew}>
-              <Text style={styles.createBulletNew}>• 지원 가능: 유튜브</Text>
-              <Text style={styles.createBulletNew}>• 30분 이상 영상 길이는 분석이 불가능해요</Text>
-              <Text style={styles.createBulletNew}>• 분석에는 약 3분의 시간이 걸립니다</Text>
-            </View>
-
-            {/* 상태 메시지 (로딩/에러) */}
-            {oembedLoading || analyzeLoading ? (
-              <Text style={styles.statusHint}>레시피 분석 중...</Text>
-            ) : null}
-            {!!(oembedError || analyzeError) && (
-              <Text style={styles.statusError}>{oembedError || analyzeError}</Text>
-            )}
-
-            {/* 완료 버튼 */}
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={[styles.createDoneBtnNew, (analyzeLoading || !link) && { opacity: 0.5 }]}
-              onPress={handleDone}
-              disabled={analyzeLoading || !link}
-            >
-              <Text style={styles.createDoneTextNew}>
-                {analyzeLoading ? '분석 중...' : '완료'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-
-      {/* 1. 카테고리 섹션 (맨 위로 올림) */}
-      <Text style={[styles.question, { marginTop: s(20) }]}>어떤 요리 찾고 있어요?</Text>
-      <FlatList
-        horizontal
-        data={CATEGORIES}
-        keyExtractor={(item, index) =>
-          item.key ? `category-${item.key}` : `category-fallback-${index}`
-        }
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryList}
-        ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
-        renderItem={({ item, index }) => (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.topBar, { height: s(150)}]}>
+          <Text style={[styles.logo, { top: logoTop }]}>Recipick!</Text>
           <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.categoryItem}
-            onPress={() =>
-              router.push(`/category/${encodeURIComponent(String(item.key || index))}`)
-            }
+            onPress={() => router.push('/mypage')}
+            hitSlop={10}
+            style={[
+              styles.profileBtn,
+              {
+                top: profileTop,
+                left: s(FIGMA_PROFILE_L),
+                width: s(FIGMA_PROFILE_SIZE),
+                height: s(FIGMA_PROFILE_SIZE),
+              },
+            ]}
           >
-            <Image source={item.icon} style={styles.categoryImg} resizeMode="contain" />
-            <Text style={styles.categoryText}>{item.key || '미지정'}</Text>
+            <Ionicons name="person" size={18} color="#111" />
           </TouchableOpacity>
-        )}
-      />
+        </View>
 
-      {/* 2. 메뉴 카드 섹션 */}
-            <View style={styles.menuGrid}>
-                    <View style={styles.leftColumn}>
-                      <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/fridge-recipe')}>
-                        <Text style={styles.menuTitle}>냉장고 파먹기</Text>
-                        <Text style={styles.menuSubText}>냉장고 속 재료를 활용해{"\n"}요리를 만들어 보세요</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/recommend-flow')}>
-                        <Text style={styles.menuTitle}>메뉴 추천 받기</Text>
-                        <Text style={styles.menuSubText}>메뉴가 고민될 때 기분에{"\n"}따라 추천을 받아보세요</Text>
-                      </TouchableOpacity>
-                    </View>
+        {/* 1. 카테고리 섹션 */}
+        <Text style={[styles.question, { marginTop: s(20) }]}>어떤 요리 찾고 있어요?</Text>
+        <FlatList
+          horizontal
+          data={CATEGORIES}
+          keyExtractor={(item, index) => item.key ? `category-${item.key}` : `category-fallback-${index}`}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.categoryList}
+          ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
+          renderItem={({ item, index }) => (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.categoryItem}
+              onPress={() => router.push(`/category/${encodeURIComponent(String(item.key || index))}`)}
+            >
+              <Image source={item.icon} style={styles.categoryImg} resizeMode="contain" />
+              <Text style={styles.categoryText}>{item.key || '미지정'}</Text>
+            </TouchableOpacity>
+          )}
+        />
 
-                    <TouchableOpacity style={styles.menuCardLarge} onPress={() => setShowCreatePanel(true)}>
-                      <View style={{ flex: 1, justifyContent: 'flex-start', paddingTop: s(4) }}>
-                        <Text style={styles.menuTitle}>레시피 만들기</Text>
-                        <Text style={[styles.menuSubText, { marginTop: s(4) }]}>유튜브 링크로 레시피를 {"\n"}만들어 보세요</Text>
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-
-            {/* 3. 홈 피드 로딩 및 에러 메시지들 */}
-            {homeFeedLoading && <Text style={styles.homeFeedHint}>홈 레시피 불러오는 중...</Text>}
-            {!!homeFeedError && <Text style={styles.oembedError}>{homeFeedError}</Text>}
-            {!!detailLoadingId && <Text style={styles.homeFeedHint}>레시피 상세 정보 불러오는 중...</Text>}
-
-      <SectionHeader
-        title="내 레시피"
-        onPressRight={() => router.push({ pathname: '/my-recipes', params: { title: '내 레시피' } })}
-      />
-      <FlatList
-        horizontal
-        data={myRecipes}
-        keyExtractor={(item) => item.id}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
-        ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
-        ListEmptyComponent={
-          <View style={{ width: SCREEN_W - s(36), paddingLeft: s(10) }}>
-            <Text style={styles.emptyText}>아직 분석한 레시피가 없어요.</Text>
+        {/* 2. 메뉴 카드 섹션 */}
+        <View style={styles.menuGrid}>
+          <View style={styles.leftColumn}>
+            <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/fridge-recipe')}>
+              <Text style={styles.menuTitle}>냉장고 파먹기</Text>
+              <Text style={styles.menuSubText}>냉장고 속 재료를 활용해{"\n"}요리를 만들어 보세요</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/recommend-flow')}>
+              <Text style={styles.menuTitle}>메뉴 추천 받기</Text>
+              <Text style={styles.menuSubText}>메뉴가 고민될 때 기분에{"\n"}따라 추천을 받아보세요</Text>
+            </TouchableOpacity>
           </View>
-        }
-        renderItem={({ item }) => (
-          <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
-        )}
-      />
 
-      <SectionHeader title="Recipick! 인기 레시피" onPressRight={() => router.push('/category/한식')} />
-            <FlatList
-              horizontal
-              data={recommendRecipes}
-              keyExtractor={(_, index) => `recommend-item-${index}`}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
-              ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
-              renderItem={({ item }) => (
-                <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
-              )}
-            />
-
-
-
-      <SectionHeader
-        title="최근 레시피"
-        onPressRight={() => router.push('/my-recipes')}
-      />
-
-      <View style={styles.recentBox}>
-              {recentRecipes.length === 0 && !homeFeedLoading ? (
-                <Text style={[styles.emptyText, { marginLeft: s(10) }]}>
-                  최근 레시피가 아직 없어.
-                </Text>
-              ) : (
-                recentRecipes.map((r, idx) => (
-                  <TouchableOpacity
-                    key={r.id}
-                    activeOpacity={0.92}
-                    style={[styles.recentCard, idx > 0 && { marginTop: s(12) }]}
-                    onPress={() => goToRecipeDetail(r)}
-                  >
-                    <View style={styles.recentInner}>
-                      <View style={styles.recentLeft}>
-                        <Image source={{ uri: r.thumbUrl }} style={styles.recentThumb} borderRadius={s(13.5)} />
-                        <Text style={styles.timeAgoLeft}>
-                          {r.savedAt ? getTimeAgo(r.savedAt) : 'Recipick 분석 완료'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.recentRight}>
-                        <Text style={styles.recentTitle} numberOfLines={2}>
-                          {r.title}
-                        </Text>
-
-<View style={styles.channelRow2}>
-  {/* 채널 아바타가 있으면 uri를 넣으세요 */}
-  <Image source={{ uri: r.channelProfileUrl }} style={styles.channelAvatar} borderRadius={999} />
-  <Text style={styles.channelName} numberOfLines={1}>
-    {r.channelName}
-  </Text>
-</View>
-
-                        <View style={styles.metaRow}>
-                          <Meta icon="heart-outline" text={String(r.likeCount || 0)} />
-                          <Meta icon="chatbubble-outline" text={String(r.commentCount || 0)} />
-                          <Meta icon="share-social-outline" text={String(r.shareCount || 0)} />
-                        </View>
-
-                        <Text style={styles.userTag}>Recipick 유저</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))
-              )}
+          <TouchableOpacity style={styles.menuCardLarge} onPress={() => setShowCreatePanel(!showCreatePanel)}>
+            <View style={{ flex: 1, justifyContent: 'flex-start', paddingTop: s(4) }}>
+              <Text style={styles.menuTitle}>레시피 만들기</Text>
+              <Text style={[styles.menuSubText, { marginTop: s(4) }]}>유튜브 링크로 레시피를 {"\n"}만들어 보세요</Text>
             </View>
+          </TouchableOpacity>
+        </View>
 
-            <View style={{ height: s(40) }} />
-          </ScrollView>
-        );
-      }
+        {/* ✅ [image_744b60.png 디자인 반영] 레시피 만들기 Inline 버전 */}
+        {showCreatePanel && (
+          <View style={styles.createPanelWrapInline}>
+            <View style={styles.createPanelInline}>
+              <TouchableOpacity onPress={handleClosePanel} style={styles.createCloseNewInline}>
+                <Ionicons name="close-circle" size={24} color="#D1D1D1" />
+              </TouchableOpacity>
+
+              <TextInput
+                value={link}
+                onChangeText={handleLinkChange}
+                placeholder="링크를 붙여넣으면 AI가 레시피로 정리해줘요!"
+                placeholderTextColor="#9AA8A7"
+                style={styles.createInputNewInline}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              {/* 유튜브 미리보기 영역 */}
+              {oembedLoading ? (
+                <View style={[styles.previewBox, { justifyContent: 'center' }]}>
+                  <ActivityIndicator color={BRAND} size="small" />
+                </View>
+              ) : videoMeta ? (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={styles.previewBox}
+                  onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${videoMeta.videoId}`)}
+                >
+                  <View style={styles.previewThumbContainer}>
+                    <Image source={{ uri: videoMeta.thumbnailUrl }} style={styles.previewThumbLarge} />
+                    <View style={styles.playIconOverlay}>
+                      <Ionicons name="play-circle" size={30} color="white" />
+                    </View>
+                  </View>
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewTitleLarge} numberOfLines={2}>{videoMeta.title}</Text>
+                    <Text style={styles.previewChannelLarge}>{videoMeta.channelName}</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+
+              <View style={styles.createNoticeNewInline}>
+                <Text style={styles.createBulletNewInline}>• 지원 가능: 유튜브</Text>
+                <Text style={styles.createBulletNewInline}>• 30분 이상 영상은 분석이 불가능해요</Text>
+                <Text style={styles.createBulletNewInline}>• 분석에는 약 3분의 시간이 걸립니다</Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.createDoneBtnNewInline, (analyzeLoading || !link) && { opacity: 0.5 }]}
+                onPress={handleDone}
+                disabled={analyzeLoading || !link}
+              >
+                <Text style={styles.createDoneTextNewInline}>{analyzeLoading ? '분석 중...' : '완료'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* 3. 홈 피드 리스트 */}
+        <SectionHeader title="내 레시피" onPressRight={() => router.push('/my-recipes')} />
+        <FlatList
+          horizontal
+          data={myRecipes}
+          keyExtractor={(item) => item.id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
+          ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
+          renderItem={({ item }) => (
+            <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
+          )}
+        />
+
+        <SectionHeader title="Recipick! 인기 레시피" />
+        <FlatList
+          horizontal
+          data={recommendRecipes}
+          keyExtractor={(_, index) => `recommend-item-${index}`}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
+          ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
+          renderItem={({ item }) => (
+            <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
+          )}
+        />
+
+        <SectionHeader title="최근 레시피" />
+        <View style={styles.recentBox}>
+          {recentRecipes.map((r) => (
+            <TouchableOpacity
+              key={r.id}
+              activeOpacity={0.92}
+              style={styles.recentCard}
+              onPress={() => goToRecipeDetail(r)}
+            >
+              <View style={styles.recentInner}>
+                <View style={styles.recentLeft}>
+                  <Image source={{ uri: r.thumbUrl }} style={styles.recentThumb} borderRadius={s(13.5)} />
+                </View>
+                <View style={styles.recentRight}>
+                  <Text style={styles.recentTitle} numberOfLines={2}>{r.title}</Text>
+                  <View style={styles.channelRow2}>
+                    <Text style={styles.channelName}>{r.channelName}</Text>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={{ height: s(40) }} />
+      </ScrollView>
+    );
+  }
 
 /* ================= components ================= */
-
 function SectionHeader({ title, onPressRight }: { title: string; onPressRight?: () => void }) {
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-
-      <TouchableOpacity onPress={onPressRight} hitSlop={10} style={styles.moreBtn}>
-        <Text style={styles.moreText}>더보기</Text>
-        <Text style={styles.moreArrow}>&gt;</Text>
+      <TouchableOpacity onPress={onPressRight} style={styles.moreBtn}>
+        <Text style={styles.moreText}>더보기 &gt;</Text>
       </TouchableOpacity>
     </View>
   );
@@ -866,42 +820,20 @@ function SectionHeader({ title, onPressRight }: { title: string; onPressRight?: 
 function HorizontalVideoCard({ data, onPress }: { data: HomeRecipeItem; onPress: () => void }) {
   return (
     <TouchableOpacity activeOpacity={0.92} style={styles.hVideoCard} onPress={onPress}>
-      <Thumb style={styles.hThumb} uri={data.thumbUrl} borderRadius={s(14)} />
-      <Text style={styles.hTitle} numberOfLines={2}>
-        {data.title}
-      </Text>
+      <Image source={{ uri: data.thumbUrl }} style={styles.hThumb} borderRadius={s(14)} />
+      <Text style={styles.hTitle} numberOfLines={2}>{data.title}</Text>
     </TouchableOpacity>
   );
 }
 
-function Meta({ icon, text }: { icon: any; text: string }) {
-  return (
-    <View style={styles.metaItem}>
-      <Ionicons name={icon} size={s(14)} color={SECTION} />
-      <Text style={styles.metaText}>{text}</Text>
-    </View>
-  );
-}
-
-function Thumb({ uri, style, borderRadius }: { uri?: string; style: any; borderRadius: number }) {
-  if (uri) {
-    return <Image source={{ uri }} style={[style, { borderRadius }]} resizeMode="cover" />;
-  }
-  return <View style={[style, { borderRadius, backgroundColor: THUMB_BG }]} />;
-}
-
 /* ================= styles ================= */
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: BG },
   content: { paddingBottom: s(24) },
-
-  // --- 상단 로고 및 프로필 ---
   topBar: { position: 'relative' },
   logo: {
     position: 'absolute',
-    left: s(FIGMA_LOGO_L),
-    right: s(FIGMA_LOGO_R),
+    left: 0, right: 0,
     textAlign: 'center',
     fontSize: s(18),
     fontWeight: '900',
@@ -912,34 +844,91 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFF',
   },
 
-  // --- 🟢 레시피 만들기 팝업 (새 버전으로 통합) ---
-  createPanelWrap: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
+  // --- 카테고리 섹션 ---
+  question: {
+    fontSize: s(20),
+    fontWeight: '900',
+    color: Q_TITLE,
+    marginLeft: s(28),
+    marginBottom: s(20),
   },
-  createPanel: {
-    width: '85%',
+  categoryList: {
+    paddingHorizontal: s(20), // 전체 리스트의 좌우 여백
+  },
+  categoryItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    // width: s(70) 대신 가변 너비를 사용하고 마진으로 간격 고정
+    marginHorizontal: s(2),
+  },
+  categoryImg: {
+    width: s(84),
+    height: s(84),
+    resizeMode: 'contain',
+  },
+  categoryText: {
+    fontSize: s(14), // 글씨도 조금 더 키우는게 균형이 맞아요
+    fontWeight: '800',
+    color: SECTION,
+    marginTop: s(4),
+  },
+
+  // --- 메뉴 그리드 ---
+  menuGrid: {
+    flexDirection: 'row',
+    paddingHorizontal: s(28),
+    gap: s(12),
+    marginTop: s(24),
+  },
+  leftColumn: { flex: 1, gap: s(12) },
+  menuCardSmall: {
+    backgroundColor: CARD,
+    borderRadius: s(24),
+    padding: s(16),
+    height: s(100),
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  menuCardLarge: {
+    flex: 1,
+    backgroundColor: CARD,
+    borderRadius: s(24),
+    padding: s(16),
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  menuTitle: { fontSize: s(16), fontWeight: '900', color: SECTION },
+  menuSubText: { fontSize: s(11), fontWeight: '700', color: SECTION, opacity: 0.5, lineHeight: s(15) },
+
+  /* --- 🟢 레시피 만들기 Inline 스타일 (강화 버전 통합) --- */
+  createPanelWrapInline: {
+    marginHorizontal: s(28),
+    marginTop: s(12),
+    marginBottom: s(20),
+  },
+  createPanelInline: {
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: s(24),
-    padding: s(24),
-    paddingTop: s(44),
-    elevation: 10,
+    padding: s(20),
+    paddingTop: s(40),
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
   },
-  createCloseNew: {
+  createCloseNewInline: {
     position: 'absolute',
-    top: s(16),
-    right: s(16),
+    top: s(14),
+    right: s(14),
   },
-  createInputNew: {
+  createInputNewInline: {
     fontSize: s(14),
     fontWeight: '600',
     color: '#333',
@@ -947,127 +936,89 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
     paddingBottom: s(10),
     textAlign: 'center',
-    marginBottom: s(24),
+    marginBottom: s(20),
   },
-  createNoticeNew: { marginBottom: s(32) },
-  createBulletNew: {
-    fontSize: s(13),
-    color: '#64748B',
-    lineHeight: s(22),
-    fontWeight: '500',
-  },
-  createDoneBtnNew: {
-    width: '100%',
-    height: s(54),
-    backgroundColor: '#1E2F2D',
+  // 강화된 미리보기 박스
+  previewBox: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFB',
     borderRadius: s(16),
+    padding: s(12),
+    marginBottom: s(20),
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    minHeight: s(100),
+  },
+  previewThumbContainer: { position: 'relative' },
+  previewThumbLarge: {
+    width: s(120),
+    height: s(67.5),
+    borderRadius: s(10),
+    backgroundColor: '#DDE6E6',
+  },
+  playIconOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: s(10),
   },
-  createDoneTextNew: { color: '#FFF', fontSize: s(16), fontWeight: '800' },
-  statusHint: { color: BRAND, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
-  statusError: { color: '#EF4444', fontSize: 12, marginBottom: 10, textAlign: 'center' },
-
-hVideoCard: {
-    width: H_CARD_W, // s(229)
-    marginRight: s(10),
+  previewInfo: {
+    flex: 1,
+    marginLeft: s(14),
+    justifyContent: 'center',
   },
-  hThumb: {
-    width: H_CARD_W,
-    height: H_THUMB_H, // s(127)
-    backgroundColor: THUMB_BG,
-  },
-  hTitle: {
-    marginTop: s(8),
+  previewTitleLarge: {
     fontSize: s(14),
     fontWeight: '900',
-    color: SECTION,
+    color: '#3B4F4E',
+    lineHeight: s(19),
+    marginBottom: s(6),
+  },
+  previewChannelLarge: {
+    fontSize: s(12),
+    fontWeight: '700',
+    color: '#8A9B9A',
+  },
+  createNoticeNewInline: { marginBottom: s(24) },
+  createBulletNewInline: {
+    fontSize: s(12),
+    color: '#64748B',
     lineHeight: s(18),
   },
-
-  // --- 카테고리 섹션 ---
-  question: {
-    marginLeft: s(28),
-    marginBottom: s(12),
-    fontSize: s(15),
-    fontWeight: '900',
-    color: Q_TITLE,
-  },
-  categoryList: { paddingLeft: s(20), paddingRight: s(20), paddingBottom: s(12) },
-  categoryItem: { width: s(82), alignItems: 'center' },
-  categoryImg: { width: s(80), height: s(80) },
-  categoryText: { marginTop: s(2), fontSize: s(12), fontWeight: '800', color: SECTION },
-
-  // --- 메뉴 그리드 ---
-  menuGrid: {
-    flexDirection: 'row',
-    paddingHorizontal: s(28),
-    marginTop: s(20),
-    justifyContent: 'space-between',
-    gap: s(12),
-  },
-  leftColumn: { flex: 1, gap: s(12) },
-  menuCardSmall: {
-    height: s(100),
-    backgroundColor: CARD,
-    borderRadius: s(16),
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: s(16),
+  createDoneBtnNewInline: {
+    width: '100%',
+    height: s(50),
+    backgroundColor: '#1E2F2D',
+    borderRadius: s(14),
     justifyContent: 'center',
-  },
-  menuCardLarge: {
-    flex: 1,
-    height: s(212),
-    backgroundColor: CARD,
-    borderRadius: s(16),
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
-    padding: s(16),
-    position: 'relative',
-  },
-  menuTitle: { fontSize: s(16), fontWeight: '900', color: SECTION, marginBottom: s(4) },
-  menuSubText: { fontSize: s(12), fontWeight: '600', color: SECTION, opacity: 0.5, lineHeight: s(16) },
-
-  // --- 피드 및 기타 ---
-  sectionHeader: {
-    marginTop: s(14),
-    marginBottom: s(10),
-    paddingHorizontal: s(28),
-    flexDirection: 'row',
     alignItems: 'center',
+  },
+  createDoneTextNewInline: { color: '#FFF', fontSize: s(15), fontWeight: '800' },
+
+  /* --- 기타 피드 스타일 --- */
+  sectionHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: s(28),
+    marginTop: s(24),
+    marginBottom: s(12),
   },
-  sectionTitle: { fontSize: s(15), fontWeight: '900', color: Q_TITLE },
-  moreBtn: { flexDirection: 'row', alignItems: 'center', gap: s(3) },
-  moreText: { fontSize: s(11), fontWeight: '800', color: SECTION },
-  moreArrow: { fontSize: s(11), fontWeight: '900', color: SECTION },
-
-  recentBox: { paddingHorizontal: s(18) },
-  recentCard: {
-    backgroundColor: CARD,
-    borderRadius: s(18),
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: s(6),
-  },
-  recentInner: { flexDirection: 'row', gap: s(12), padding: s(12) },
-  recentLeft: { width: '45%' },
+  sectionTitle: { fontSize: s(16), fontWeight: '900', color: Q_TITLE },
+  moreBtn: { justifyContent: 'center' },
+  moreText: { fontSize: s(12), color: SECTION, fontWeight: '700' },
+  hVideoCard: { width: s(200), marginLeft: s(10) },
+  hThumb: { width: s(200), height: s(112) },
+  hTitle: { fontSize: s(14), fontWeight: '800', color: SECTION, marginTop: s(8) },
+  recentBox: { paddingHorizontal: s(28), gap: s(12) },
+  recentCard: { backgroundColor: CARD, borderRadius: s(18), padding: s(12) },
+  recentInner: { flexDirection: 'row', gap: s(12) },
+  recentLeft: { width: s(120) },
   recentThumb: { width: '100%', aspectRatio: 16 / 9 },
-  recentRight: { flex: 1, justifyContent: 'space-between' },
-  recentTitle: { fontSize: s(14), fontWeight: '900', color: SECTION, lineHeight: s(18), minHeight: s(36) },
-
-  channelRow2: { flexDirection: 'row', alignItems: 'center', gap: s(8) },
-  channelAvatar: { width: s(18), height: s(18) },
-  channelName: { fontSize: s(11), fontWeight: '800', color: SECTION },
-
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: s(8) },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: s(2) },
-  metaText: { fontSize: s(11), fontWeight: '700', color: SECTION },
-  priceText: { marginLeft: 'auto', fontSize: s(11), fontWeight: '900', color: SECTION },
-
-  emptyText: { paddingLeft: s(28), fontSize: s(12), fontWeight: '700', color: SECTION, opacity: 0.7 },
-  homeFeedHint: { marginTop: s(10), marginLeft: s(28), fontSize: s(12), color: SECTION },
-  timeAgoLeft: { marginTop: s(6), fontSize: s(11), color: SECTION, opacity: 0.75 },
+  recentRight: { flex: 1, justifyContent: 'center' },
+  recentTitle: { fontSize: s(14), fontWeight: '900', color: SECTION, lineHeight: s(18) },
+  channelRow2: { marginTop: s(4) },
+  channelName: { fontSize: s(11), fontWeight: '800', color: SECTION, opacity: 0.6 },
 });
