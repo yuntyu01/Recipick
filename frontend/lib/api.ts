@@ -123,6 +123,10 @@ export type RecommendationItem = {
   channel_profile_url?: string;
   url: string;
   category: string;
+  like_count?: string | number;
+  comment_count?: string | number;
+  share_count?: string | number;
+  total_estimated_price?: string | number;
 };
 
 export type RecommendationResponse =
@@ -460,6 +464,10 @@ export interface LatestRecipe {
   url: string;
   category: string;
   created_at: string;
+  sharer_nickname?: string;
+  like_count?: string | number;
+  comment_count?: string | number;
+  share_count?: string | number;
 }
 
 export async function getLatestRecipes(limit = 20): Promise<LatestRecipe[]> {
