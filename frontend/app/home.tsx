@@ -629,65 +629,71 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.topBar, { height: s(150)}]}>
-          <Text style={[styles.logo, { top: logoTop }]}>Recipick!</Text>
-          <TouchableOpacity
-            onPress={() => router.push('/mypage')}
-            hitSlop={10}
-            style={[
-              styles.profileBtn,
-              {
-                top: profileTop,
-                left: s(FIGMA_PROFILE_L),
-                width: s(FIGMA_PROFILE_SIZE),
-                height: s(FIGMA_PROFILE_SIZE),
-              },
-            ]}
-          >
-            <Ionicons name="person" size={18} color="#111" />
-          </TouchableOpacity>
-        </View>
+        {/* --- 🟢 [새로운] 상단 통합 영역 (시안 반영) --- */}
+        <View style={styles.topSectionFull}>
+          {/* (A) 상태바 영역 확보 (폰트 크기/색상 등은 기기 설정을 따름) */}
+          <View style={{ height: insets.top }} />
 
-        {/* 1. 카테고리 섹션 */}
-        <Text style={[styles.question, { marginTop: s(20) }]}>어떤 요리 찾고 있어요?</Text>
-        <FlatList
-          horizontal
-          data={CATEGORIES}
-          keyExtractor={(item, index) => item.key ? `category-${item.key}` : `category-fallback-${index}`}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryList}
-          ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
-          renderItem={({ item, index }) => (
+          {/* (B) 로고 & 프로필 영역 (시안처럼 여백 조정) */}
+          <View style={styles.navRow}>
+            <View style={{ width: s(40) }} /> {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
+            <Text style={styles.logoInline}>Recipick!</Text>
             <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.categoryItem}
-              onPress={() => router.push(`/category/${encodeURIComponent(String(item.key || index))}`)}
+              onPress={() => router.push('/mypage')}
+              hitSlop={10}
+              style={styles.profileBtnInline}
             >
-              <Image source={item.icon} style={styles.categoryImg} resizeMode="contain" />
-              <Text style={styles.categoryText}>{item.key || '미지정'}</Text>
-            </TouchableOpacity>
-          )}
-        />
-
-        {/* 2. 메뉴 카드 섹션 */}
-        <View style={styles.menuGrid}>
-          <View style={styles.leftColumn}>
-            <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/fridge-recipe')}>
-              <Text style={styles.menuTitle}>냉장고 파먹기</Text>
-              <Text style={styles.menuSubText}>냉장고 속 재료를 활용해{"\n"}요리를 만들어 보세요</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.menuCardSmall} onPress={() => router.push('/recommend-flow')}>
-              <Text style={styles.menuTitle}>메뉴 추천 받기</Text>
-              <Text style={styles.menuSubText}>메뉴가 고민될 때 기분에{"\n"}따라 추천을 받아보세요</Text>
+              <Ionicons name="person" size={s(20)} color="#000" />
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.menuCardLarge} onPress={() => setShowCreatePanel(!showCreatePanel)}>
-            <View style={{ flex: 1, justifyContent: 'flex-start', paddingTop: s(4) }}>
-              <Text style={styles.menuTitle}>레시피 만들기</Text>
-              <Text style={[styles.menuSubText, { marginTop: s(4) }]}>유튜브 링크로 레시피를 {"\n"}만들어 보세요</Text>
+          {/* (C) 질문 텍스트 */}
+          <Text style={styles.questionInline}>어떤 요리 찾고 있어요?</Text>
+
+          {/* (D) 카테고리 가로 스크롤 */}
+          <FlatList
+            horizontal
+            data={CATEGORIES}
+            keyExtractor={(item) => `cat-${item.key}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryListInline}
+            ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.categoryItemInline}
+                onPress={() => router.push(`/category/${encodeURIComponent(String(item.key))}`)}
+              >
+                <Image source={item.icon} style={styles.categoryImgInline} resizeMode="contain" />
+                <Text style={styles.categoryTextInline}>{item.key}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+
+        {/* --- 메뉴 그리드 영역 --- */}
+        <View style={styles.menuSectionWrap}>
+          <View style={styles.menuGridNew}>
+            <View style={styles.menuLeftNew}>
+              {/* 1. 냉장고 파먹기 */}
+              <TouchableOpacity style={styles.menuCardNew} onPress={() => router.push('/fridge-recipe')}>
+                <Text style={styles.menuTitleNew}>냉장고 파먹기</Text>
+                <Text style={styles.menuSubTextNew}>냉장고 속 재료를 활용해{"\n"}요리를 만들어 보세요</Text>
+              </TouchableOpacity>
+
+              {/* 2. 메뉴 추천 받기 */}
+              <TouchableOpacity style={styles.menuCardNew} onPress={() => router.push('/recommend-flow')}>
+                <Text style={styles.menuTitleNew}>메뉴 추천 받기</Text>
+                <Text style={styles.menuSubTextNew}>메뉴가 고민될 때 기분에{"\n"}따라 추천을 받아보세요</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+
+            {/* 3. 레시피 만들기 */}
+            <TouchableOpacity style={styles.menuCardLargeNew} onPress={() => setShowCreatePanel(!showCreatePanel)}>
+              <Text style={styles.menuTitleNew}>레시피 만들기</Text>
+              <Text style={[styles.menuSubTextNew, { marginTop: s(10) }]}>유튜브 링크로 레시피를{"\n"}만들어 보세요</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ✅ [image_744b60.png 디자인 반영] 레시피 만들기 Inline 버전 */}
@@ -751,35 +757,92 @@ export default function Home() {
         )}
 
         {/* 3. 홈 피드 리스트 */}
-        <SectionHeader title="내 레시피" onPressRight={() => router.push('/my-recipes')} />
-        <FlatList
-          horizontal
-          data={myRecipes}
-          keyExtractor={(item) => item.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
-          ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
-          renderItem={({ item }) => (
-            <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
-          )}
-        />
 
-        <SectionHeader title="Recipick! 인기 레시피" />
-        <FlatList
-          horizontal
-          data={recommendRecipes}
-          keyExtractor={(_, index) => `recommend-item-${index}`}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingLeft: s(18), paddingRight: s(18) }}
-          ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
-          renderItem={({ item }) => (
-            <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
-          )}
-        />
 
-        <SectionHeader title="최근 레시피" />
+        {/* --- 🟢 [새로운] 레시피 통합 블록 (나의 레시피 + 인기 레시피) --- */}
+        <View style={styles.combinedRecipeBlock}>
+
+          {/* (A) 나의 레시피 섹션 */}
+          <View style={styles.innerSection}>
+            <View style={styles.recipeHeaderRow}>
+              <Text style={styles.recipeSectionTitle}>나의 레시피</Text>
+              <TouchableOpacity onPress={() => router.push('/my-recipes')}>
+                <Text style={styles.recipeMoreText}>더보기 &gt;</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              horizontal
+              data={myRecipes}
+              keyExtractor={(item) => item.id}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recipeListContent}
+              ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
+              renderItem={({ item }) => (
+                <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
+              )}
+            />
+          </View>
+
+          {/* 섹션 사이 간격 조절용 선 (선택 사항) */}
+          <View style={{ height: s(25) }} />
+
+          {/* (B) 인기 레시피 섹션 */}
+          <View style={styles.innerSection}>
+            <View style={styles.recipeHeaderRow}>
+              <Text style={styles.recipeSectionTitle}>인기 레시피</Text>
+              <TouchableOpacity onPress={() => router.push(`/category/${encodeURIComponent('한식')}`)}>
+                <Text style={styles.recipeMoreText}>더보기 &gt;</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              horizontal
+              data={recommendRecipes}
+              keyExtractor={(_, index) => `recommend-item-${index}`}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recipeListContent}
+              ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
+              renderItem={({ item }) => (
+                <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
+              )}
+            />
+          </View>
+        </View>
+
+        {/* --- 3. 최근 레시피 섹션 통합 블록 --- */}
+        <View style={styles.recentSectionBlock}>
+          {/* (A) 상단 헤더: 제목과 더보기 */}
+          <View style={styles.recentHeaderRow}>
+            <Text style={styles.sectionTitle}>최근 레시피</Text>
+            <TouchableOpacity onPress={() => router.push('/my-recipes')}>
+              <Text style={styles.moreText}>더보기 &gt;</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* (B) 가장 최신 레시피 (배열의 0번째 항목) */}
+          {recentRecipes.length > 0 && (
+            <TouchableOpacity
+              activeOpacity={0.92}
+              style={styles.recentSingleCard}
+              onPress={() => goToRecipeDetail(recentRecipes[0])}
+            >
+              <View style={styles.recentInner}>
+                <View style={styles.recentLeft}>
+                  <Image source={{ uri: recentRecipes[0].thumbUrl }} style={styles.recentThumb} />
+                </View>
+                <View style={styles.recentRight}>
+                  <Text style={styles.recentTitle} numberOfLines={2}>{recentRecipes[0].title}</Text>
+                  <View style={styles.channelRow2}>
+                    <Text style={styles.channelName}>{recentRecipes[0].channelName}</Text>
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* (C) 나머지 최근 레시피 리스트 (1번째 항목부터 끝까지) */}
         <View style={styles.recentBox}>
-          {recentRecipes.map((r) => (
+          {recentRecipes.slice(1).map((r) => (
             <TouchableOpacity
               key={r.id}
               activeOpacity={0.92}
@@ -810,6 +873,7 @@ function SectionHeader({ title, onPressRight }: { title: string; onPressRight?: 
   return (
     <View style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
+      {/* 여기서 onPressRight가 전달되지 않으면 버튼을 눌러도 아무 반응이 없습니다 */}
       <TouchableOpacity onPress={onPressRight} style={styles.moreBtn}>
         <Text style={styles.moreText}>더보기 &gt;</Text>
       </TouchableOpacity>
@@ -905,9 +969,9 @@ const styles = StyleSheet.create({
 
   /* --- 🟢 레시피 만들기 Inline 스타일 (강화 버전 통합) --- */
   createPanelWrapInline: {
-    marginHorizontal: s(28),
-    marginTop: s(12),
-    marginBottom: s(20),
+    marginHorizontal: s(10),
+    marginTop: s(10),
+    marginBottom: s(10),
   },
   createPanelInline: {
     width: '100%',
@@ -982,11 +1046,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8A9B9A',
   },
-  createNoticeNewInline: { marginBottom: s(24) },
+  createNoticeNewInline: { marginBottom: s(20) },
   createBulletNewInline: {
-    fontSize: s(12),
-    color: '#64748B',
-    lineHeight: s(18),
+    fontSize: s(15),
+    color: '#475569',
+    lineHeight: s(22),
   },
   createDoneBtnNewInline: {
     width: '100%',
@@ -1003,7 +1067,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: s(28),
-    marginTop: s(24),
+    marginTop: s(14),
     marginBottom: s(12),
   },
   sectionTitle: { fontSize: s(16), fontWeight: '900', color: Q_TITLE },
@@ -1021,4 +1085,303 @@ const styles = StyleSheet.create({
   recentTitle: { fontSize: s(14), fontWeight: '900', color: SECTION, lineHeight: s(18) },
   channelRow2: { marginTop: s(4) },
   channelName: { fontSize: s(11), fontWeight: '800', color: SECTION, opacity: 0.6 },
+
+  /* --- 통합 블록 스타일 --- */
+    recentSectionBlock: {
+      backgroundColor: '#FFFFFF',
+      marginHorizontal: s(28),
+      borderRadius: s(24),
+      padding: s(20),
+      marginTop: s(24),
+      marginBottom: s(12), // 밑에 깔리는 리스트와의 간격
+      borderWidth: 1.5,
+      borderColor: '#E2E8F0',
+    },
+    recentHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: s(16),
+    },
+    /* --- 1. 최근 레시피 통합 블록 (맨 위 묶음) --- */
+      recentSectionBlock: {
+        backgroundColor: '#FFFFFF',
+        marginHorizontal: s(20), // 전체 화면에서의 여백 (다른 블록과 통일)
+        borderRadius: s(24),
+        paddingTop: s(20),
+        paddingBottom: s(20),
+        paddingHorizontal: s(16), // 내부 여백을 살짝 줄여서 이미지 위치 조정
+        marginTop: s(24),
+        marginBottom: s(8),
+      },
+      recentHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: s(15),
+        paddingHorizontal: s(4), // 제목 글자 위치를 이미지 선에 맞춤
+      },
+      recentSingleCard: {
+        backgroundColor: 'transparent',
+        padding: 0,
+      },
+
+      /* --- 2. 하단 개별 리스트 (아래 나열되는 것들) --- */
+      recentBox: {
+        paddingHorizontal: s(20), // 위 블록의 marginHorizontal과 동일하게 설정
+        gap: s(8),
+      },
+      recentCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: s(24), // 위 블록과 동일한 곡률
+        padding: s(16),
+      },
+
+      /* --- 3. 공통 요소 (위아래 위치를 맞추는 핵심) --- */
+      recentInner: {
+        flexDirection: 'row',
+        gap: s(12),
+        alignItems: 'center',
+      },
+      recentLeft: {
+        width: s(120), // 위아래 썸네일 너비를 동일하게 고정
+      },
+      recentThumb: {
+        width: '100%',
+        aspectRatio: 16 / 9,
+        borderRadius: s(12),
+      },
+      recentRight: {
+        flex: 1,
+        justifyContent: 'center',
+      },
+
+  /* topSectionBlock을 위한 스타일 정의 */
+ /* StyleSheet.create 내부 */
+
+   topSectionBlock: {
+     backgroundColor: '#FFFFFF',
+     marginHorizontal: s(20),
+     borderRadius: s(28),
+     paddingTop: s(25),      // 상단 여백을 좀 더 주어 위치 조정
+     paddingBottom: s(25),
+     marginTop: s(50),       // 1번 요청: 블록 전체를 아까 위치만큼 아래로 내림
+     marginBottom: s(20),
+     elevation: 3,
+     shadowColor: '#000',
+     shadowOffset: { width: 0, height: 2 },
+     shadowOpacity: 0.08,
+     shadowRadius: 8,
+     overflow: 'hidden',     // 내부 내용이 넘치지 않게
+   },
+   navRow: {
+     flexDirection: 'row',
+     justifyContent: 'space-between',
+     alignItems: 'center',
+     paddingHorizontal: s(20),
+     marginBottom: s(30),    // 질문과의 간격
+   },
+   logoInline: {
+     fontSize: s(20),
+     fontWeight: '900',
+     color: BRAND,
+     textAlign: 'center',
+   },
+   profileBtnInline: {       // 2번 요청: 프로필 버튼 스타일
+     width: s(40),
+     height: s(40),
+     borderRadius: s(20),
+     alignItems: 'center',
+     justifyContent: 'center',
+     backgroundColor: '#F3F6F6',
+   },
+   questionInline: {
+     fontSize: s(22),
+     fontWeight: '900',
+     color: Q_TITLE,
+     paddingHorizontal: s(24),
+     marginBottom: s(20),
+   },
+   // 3번 요청: 가로 스크롤용 카테고리 스타일
+   categoryListInline: {
+     paddingHorizontal: s(20),
+     paddingBottom: s(5),
+   },
+   categoryItemInline: {
+     alignItems: 'center',
+     justifyContent: 'center',
+     width: s(85),           // 한 줄에 적당히 보이도록 너비 고정
+   },
+   categoryImgInline: {
+     width: s(75),
+     height: s(75),
+   },
+   categoryTextInline: {
+     fontSize: s(13),
+     fontWeight: '800',
+     color: SECTION,
+     marginTop: s(4),
+   },
+/* StyleSheet.create 내부 스타일 정의 */
+
+  screen: { flex: 1, backgroundColor: BG }, // BG 색상은 약간 회색빛 도는 '#F3F6F6' 유지
+  content: { paddingBottom: s(24) },
+
+  // --- 🟢 [새로운] 시안 반영 상단 통합 영역 스타일 ---
+  topSectionFull: {
+    backgroundColor: '#FFFFFF', // 맨 위부터 카테고리까지 전체가 흰색
+    paddingBottom: s(25),      // 카테고리 아래 여백
+  },
+  navRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: s(20),
+    marginTop: s(15),          // 상태바 아래 간격
+    marginBottom: s(30),       // 질문과의 간격
+  },
+  logoInline: {
+    fontSize: s(20),
+    fontWeight: '900',
+    color: BRAND,              // 민트색 로고
+    textAlign: 'center',
+  },
+  profileBtnInline: {
+    width: s(40),
+    height: s(40),
+    borderRadius: s(20),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F6F6', // 약간 회색 배경으로 버튼 강조
+  },
+  questionInline: {
+    fontSize: s(18),           // 시안처럼 조금 작게 조정
+    fontWeight: '900',
+    color: Q_TITLE,
+    paddingHorizontal: s(28),
+    marginBottom: s(10),
+  },
+  categoryListInline: {
+    paddingHorizontal: s(20),
+    paddingBottom: s(5),
+  },
+  categoryItemInline: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: s(85),              // 가로 스크롤에 맞는 너비 고정
+  },
+  categoryImgInline: {
+    width: s(75),
+    height: s(75),
+  },
+  categoryTextInline: {
+    fontSize: s(13),
+    fontWeight: '800',
+    color: SECTION,
+    marginTop: s(4),
+  },
+
+  // --- 🟢 [새로운] 메뉴 그리드 영역 스타일 (시안 반영) ---
+  menuSectionWrap: {
+    backgroundColor: BG,       // 하단은 투명하거나 BG 색상 (카드가 돋보이게)
+    paddingVertical: s(8),    // 상단 흰색 영역과의 간격
+  },
+  menuGridNew: {
+    flexDirection: 'row',
+    paddingHorizontal: s(10),
+    gap: s(8),
+  },
+  menuLeftNew: { flex: 1, gap: s(10) },
+  menuCardNew: {
+      backgroundColor: CARD,
+      borderRadius: s(24),
+      padding: s(16),
+      height: s(110),
+      borderWidth: 0,
+      borderColor: 'transparent',
+      // ----------------------
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+    },
+  menuCardLargeNew: {
+      flex: 1,
+      backgroundColor: CARD,
+      borderRadius: s(24),
+      padding: s(16),
+      height: s(232),
+      borderWidth: 0,
+      borderColor: 'transparent',
+      // ----------------------
+      justifyContent: 'flex-start',
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 3,
+    },
+  menuTitleNew: {
+    fontSize: s(16),
+    fontWeight: '900',
+    color: '#000', // 시안처럼 검은색 글씨
+  },
+  mintText: { color: BRAND },  // 제목 내의 민트색 텍스트
+  menuSubTextNew: {
+    fontSize: s(11),
+    fontWeight: '600',
+    color: SECTION,
+    opacity: 0.5,
+    lineHeight: s(15),
+    marginTop: s(4),
+  },
+
+/* StyleSheet.create 내부 스타일 정의 */
+
+  /* StyleSheet.create 내부 스타일 정의 */
+
+    // --- 🟢 두 섹션을 하나로 묶는 큰 흰색 박스 ---
+    combinedRecipeBlock: {
+      backgroundColor: '#FFFFFF',
+      marginHorizontal: s(10),  // 양 끝 여백 통일
+      borderRadius: s(24),
+      paddingVertical: s(25),   // 내부 상하 여백
+      marginTop: s(8),
+      // 테두리 없이 그림자만 적용
+      borderWidth: 0,
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 5,
+    },
+
+    innerSection: {
+      // 개별 섹션 스타일 (필요시 추가 여백 조정)
+    },
+
+    recipeHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: s(20),
+      marginBottom: s(15),
+    },
+
+    recipeSectionTitle: {
+      fontSize: s(16),
+      fontWeight: '900',
+      color: '#000',           // 제목 검은색 통일
+    },
+
+    recipeMoreText: {
+      fontSize: s(12),
+      color: '#8A9B9A',
+      fontWeight: '700',
+    },
+
+    recipeListContent: {
+      paddingHorizontal: s(20), // 리스트 시작 여백
+    },
 });
