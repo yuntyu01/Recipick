@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert, Dimensions, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,11 +10,10 @@ import { getRecommendQuestions, postRecommendRecipes } from '../lib/api';
 const { width } = Dimensions.get('window');
 const s = (v: number) => Math.round(v * (width / 430));
 
-// 백엔드 label에서 텍스트와 이모지를 분리하는 함수
 const splitEmoji = (label: string) => {
   const match = label.match(/(.*)\s([\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{27BF}])/u);
   if (match) return { text: match[1], emoji: match[2] };
-  return { text: label, emoji: '🍴' }; // 기본 이모지
+  return { text: label, emoji: '🍴' };
 };
 
 export default function RecommendFlow() {
@@ -68,8 +67,8 @@ export default function RecommendFlow() {
 
   const shuffle = (r: any[], s: any[]) => {
     setDisplayData({
-      recipes: [...r].sort(() => Math.random() - 0.5).slice(0, 3),
-      suggestions: [...s].sort(() => Math.random() - 0.5).slice(0, 3)
+      recipes: [...r].sort(() => Math.random() - 0.5).slice(0, 4),
+      suggestions: [...s].sort(() => Math.random() - 0.5).slice(0, 4)
     });
   };
 
@@ -89,8 +88,13 @@ export default function RecommendFlow() {
 
       {!isResult ? (
         <View style={{ flex: 1 }}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${((currentStep + 1) / questions.length) * 100}%` }]} />
+          <View style={styles.progressContainer}>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${((currentStep + 1) / questions.length) * 100}%` }]} />
+            </View>
+            <Text style={styles.stepText}>
+              <Text style={{ color: '#54CDA4' }}>{currentStep + 1}</Text> / {questions.length}
+            </Text>
           </View>
 
           <ScrollView style={styles.scroll}>
@@ -98,11 +102,9 @@ export default function RecommendFlow() {
               <Text style={styles.mintTitle}>오늘 어떤 요리가 당기시나요?</Text>
               <Text style={styles.blackTitle}>AI가 딱 맞는 레시피를 찾아드릴게요</Text>
               <Text style={styles.greySubText}>질문 몇 가지만 답해주세요!</Text>
-
               <Text style={styles.questionMain}>{currentQ.question}</Text>
 
               <View style={styles.choiceWrapper}>
-                {/* 1. 카테고리 그리드 (이미지 대신 이모지 텍스트 사용) */}
                 {currentQ.choices.filter((c: any) => c.key !== 'any').map((choice: any) => {
                   const active = currentQ.multi_select ? (answers[currentQ.id] || []).includes(choice.key) : answers[currentQ.id] === choice.key;
                   const { text, emoji } = splitEmoji(choice.label);
@@ -110,7 +112,6 @@ export default function RecommendFlow() {
                   if (currentQ.id === 'category') {
                     return (
                       <TouchableOpacity key={choice.key} style={[styles.gridCard, active && styles.activeCard]} onPress={() => handleSelect(currentQ.id, choice.key, currentQ.multi_select)}>
-                        {/* 이미지 대신 이모지 텍스트만! */}
                         <Text style={styles.emojiDisplay}>{emoji}</Text>
                         <Text style={styles.gridLabel}>{text}</Text>
                         <View style={[styles.checkBoxBelow, active && styles.checkBoxActive]}>
@@ -119,7 +120,6 @@ export default function RecommendFlow() {
                       </TouchableOpacity>
                     );
                   }
-
                   return (
                     <TouchableOpacity key={choice.key} style={[styles.listBtn, active && styles.activeListBtn]} onPress={() => handleSelect(currentQ.id, choice.key, currentQ.multi_select)}>
                       <View style={[styles.checkCircle, active && styles.checkCircleActive]}>
@@ -130,7 +130,6 @@ export default function RecommendFlow() {
                   );
                 })}
 
-                {/* 2. 상관없음 버튼 (간격 확보) */}
                 {currentQ.choices.find((c: any) => c.key === 'any') && (
                   <TouchableOpacity
                     style={[styles.anyBtn, (answers[currentQ.id] || []).includes('any') && styles.activeListBtn]}
@@ -153,8 +152,31 @@ export default function RecommendFlow() {
           </View>
         </View>
       ) : (
-          /* 결과 화면 생략 (기존 유지) */
-          <View style={styles.center}><Text>추천 완료!</Text></View>
+        <ScrollView style={styles.scroll}>
+          <View style={styles.padding}>
+            <Text style={styles.mintTitle}>분석 완료!</Text>
+            <Text style={styles.blackTitle}>딱 맞는 레시피를 찾았어요</Text>
+            <View style={styles.resultGrid}>
+              {displayData.recipes.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.resultCard}
+                  onPress={() => router.push({ pathname: '/recipe-detail', params: { id: item.id, videoId: item.video_id } })}
+                >
+                  <View style={styles.thumbWrapper}>
+                    <Image source={{ uri: item.thumbnail_url }} style={styles.resultThumb} />
+                    <View style={styles.playIconBadge}><Ionicons name="play" size={14} color="white" /></View>
+                  </View>
+                  <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={styles.resultSub}>{item.channel_name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setCurrentStep(0); setIsResult(false); setAnswers({}); }}>
+              <Text style={styles.retryBtnText}>다시 추천받기</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -165,30 +187,28 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { height: s(60), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: s(20) },
   headerTitle: { fontSize: s(18), fontWeight: '800' },
-  progressTrack: { height: s(4), backgroundColor: '#F0F0F0', marginHorizontal: s(25), borderRadius: 2 },
-  progressFill: { height: '100%', backgroundColor: '#54CDA4' },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: s(25), marginTop: s(10) },
+  progressTrack: { flex: 1, height: s(6), backgroundColor: '#F0F0F0', borderRadius: 3, marginRight: s(12) },
+  progressFill: { height: '100%', backgroundColor: '#54CDA4', borderRadius: 3 },
+  stepText: { fontSize: s(14), fontWeight: '800', color: '#999' },
   padding: { paddingHorizontal: s(25), paddingTop: s(20) },
+  scroll: { flex: 1 },
 
   mintTitle: { fontSize: s(20), fontWeight: '800', color: '#54CDA4' },
   blackTitle: { fontSize: s(20), fontWeight: '800', color: '#000', marginTop: s(2) },
   greySubText: { fontSize: s(14), color: '#999', marginTop: s(10), fontWeight: '600' },
-
   questionMain: { fontSize: s(24), fontWeight: '900', textAlign: 'center', marginVertical: s(40) },
   choiceWrapper: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
 
-  // 그리드 카드
-  gridCard: { width: '31%', aspectRatio: 0.85, backgroundColor: '#FFF', borderRadius: s(16), justifyContent: 'center', alignItems: 'center', marginBottom: s(15), borderWidth: 1.5, borderColor: '#E2E8F0' },
+  gridCard: { width: '31%', aspectRatio: 0.85, backgroundColor: '#FFF', borderRadius: s(16), justifyContent: 'center', alignItems: 'center', marginBottom: s(10), borderWidth: 1.5, borderColor: '#E2E8F0' },
   activeCard: { borderColor: '#54CDA4', backgroundColor: '#F0FBF8' },
-
-  // 이모지 텍스트 스타일 (이미지 대신 크게!)
   emojiDisplay: { fontSize: s(35), marginBottom: s(5) },
-
   gridLabel: { fontSize: s(14), fontWeight: '700', marginBottom: s(10), color: '#333' },
   checkBoxBelow: { width: s(18), height: s(18), borderRadius: s(5), borderWidth: 1.5, borderColor: '#CBD5E0', backgroundColor: '#EDF2F7', justifyContent: 'center', alignItems: 'center' },
   checkBoxActive: { backgroundColor: '#54CDA4', borderColor: '#54CDA4' },
 
   listBtn: { width: '100%', height: s(55), backgroundColor: '#FFF', borderRadius: s(12), flexDirection: 'row', alignItems: 'center', paddingHorizontal: s(15), marginBottom: s(12), borderWidth: 1.5, borderColor: '#E2E8F0' },
-  anyBtn: { width: '100%', height: s(55), backgroundColor: '#FFF', borderRadius: s(12), flexDirection: 'row', alignItems: 'center', paddingHorizontal: s(15), marginTop: s(25), borderWidth: 1.5, borderColor: '#E2E8F0' },
+  anyBtn: { width: '100%', height: s(55), backgroundColor: '#FFF', borderRadius: s(12), flexDirection: 'row', alignItems: 'center', paddingHorizontal: s(15), marginTop: s(2), borderWidth: 1.5, borderColor: '#E2E8F0' },
   activeListBtn: { borderColor: '#54CDA4', backgroundColor: '#F0FBF8' },
   checkCircle: { width: s(20), height: s(20), borderRadius: s(4), borderWidth: 1.5, borderColor: '#CBD5E0', marginRight: s(10), justifyContent: 'center', alignItems: 'center' },
   checkCircleActive: { backgroundColor: '#54CDA4', borderColor: '#54CDA4' },
@@ -198,5 +218,15 @@ const styles = StyleSheet.create({
   nextBtn: { height: s(60), backgroundColor: '#54CDA4', borderRadius: s(30), justifyContent: 'center', alignItems: 'center' },
   disabledBtn: { backgroundColor: '#E2E8F0' },
   nextBtnText: { color: '#FFF', fontSize: s(18), fontWeight: '800' },
-  scroll: { flex: 1 },
+
+  // 결과 화면용 스타일
+  resultGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: s(25) },
+  resultCard: { width: '48%', marginBottom: s(15) },
+  thumbWrapper: { position: 'relative' },
+  resultThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: s(12), backgroundColor: '#F3F6F6' },
+  playIconBadge: { position: 'absolute', bottom: s(8), right: s(8), backgroundColor: 'rgba(0,0,0,0.6)', width: s(24), height: s(24), borderRadius: s(12), justifyContent: 'center', alignItems: 'center' },
+  resultTitle: { fontSize: s(14), fontWeight: '700', marginTop: s(8), color: '#333' },
+  resultSub: { fontSize: s(12), color: '#8A9B9A', marginTop: s(4), fontWeight: '600' },
+  retryBtn: { marginTop: s(20), height: s(50), borderRadius: s(12), borderWidth: 1.5, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: s(40) },
+  retryBtnText: { fontSize: s(15), fontWeight: '700', color: '#64748B' },
 });

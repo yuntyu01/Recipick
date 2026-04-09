@@ -1089,7 +1089,7 @@ const styles = StyleSheet.create({
   /* --- 통합 블록 스타일 --- */
     recentSectionBlock: {
       backgroundColor: '#FFFFFF',
-      marginHorizontal: s(28),
+      marginHorizontal: s(20),
       borderRadius: s(24),
       padding: s(20),
       marginTop: s(24),
@@ -1106,12 +1106,12 @@ const styles = StyleSheet.create({
     /* --- 1. 최근 레시피 통합 블록 (맨 위 묶음) --- */
       recentSectionBlock: {
         backgroundColor: '#FFFFFF',
-        marginHorizontal: s(20), // 전체 화면에서의 여백 (다른 블록과 통일)
+        marginHorizontal: s(10), // 전체 화면에서의 여백 (다른 블록과 통일)
         borderRadius: s(24),
         paddingTop: s(20),
         paddingBottom: s(20),
         paddingHorizontal: s(16), // 내부 여백을 살짝 줄여서 이미지 위치 조정
-        marginTop: s(24),
+        marginTop: s(14),
         marginBottom: s(8),
       },
       recentHeaderRow: {
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
 
       /* --- 2. 하단 개별 리스트 (아래 나열되는 것들) --- */
       recentBox: {
-        paddingHorizontal: s(20), // 위 블록의 marginHorizontal과 동일하게 설정
+        paddingHorizontal: s(10), // 위 블록의 marginHorizontal과 동일하게 설정
         gap: s(8),
       },
       recentCard: {
@@ -1284,7 +1284,7 @@ const styles = StyleSheet.create({
   // --- 🟢 [새로운] 메뉴 그리드 영역 스타일 (시안 반영) ---
   menuSectionWrap: {
     backgroundColor: BG,       // 하단은 투명하거나 BG 색상 (카드가 돋보이게)
-    paddingVertical: s(8),    // 상단 흰색 영역과의 간격
+    paddingVertical: s(10),    // 상단 흰색 영역과의 간격
   },
   menuGridNew: {
     flexDirection: 'row',
@@ -1347,14 +1347,13 @@ const styles = StyleSheet.create({
       marginHorizontal: s(10),  // 양 끝 여백 통일
       borderRadius: s(24),
       paddingVertical: s(25),   // 내부 상하 여백
-      marginTop: s(8),
-      // 테두리 없이 그림자만 적용
+      marginHorizontal: 0,
       borderWidth: 0,
       elevation: 3,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
-      shadowRadius: 5,
+      shadowRadius: 3,
     },
 
     innerSection: {
@@ -1382,6 +1381,6 @@ const styles = StyleSheet.create({
     },
 
     recipeListContent: {
-      paddingHorizontal: s(20), // 리스트 시작 여백
+      paddingHorizontal: s(10), // 리스트 시작 여백
     },
 });
