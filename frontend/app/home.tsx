@@ -555,7 +555,8 @@ export default function Home() {
 
             if (currentId) {
               // 1. 서버에 저장 요청 (이게 성공해야 내 레시피에 들어갑니다)
-              await createUserHistorySafe(currentId, finalRes.data);
+              const dataWithVideoId = { ...finalRes.data, video_id: finalRes.video_id ?? videoId };
+              await createUserHistorySafe(currentId, dataWithVideoId);
               console.log('[저장 완료] 내 히스토리에 추가되었습니다.');
 
               // 2. [핵심] 저장 직후에 목록을 다시 불러옵니다. (ID를 인자로 꼭 넘겨주세요)
