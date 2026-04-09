@@ -435,9 +435,9 @@ def get_recipe_pool_for_recommendation(per_category: int = 20, categories: list 
                 "total_estimated_price": item.get("total_estimated_price"),
                 "protein_g":             nutrition.get("protein_g"),
                 "servings":              item.get("servings"),
-                "like_count":            int(item.get("like_count") or 0),
-                "comment_count":         int(item.get("comment_count") or 0),
-                "share_count":           int(item.get("share_count") or 0),
+                "like_count":            item.get("like_count") or 0,
+                "comment_count":         item.get("comment_count") or 0,
+                "share_count":           item.get("share_count") or 0,
                 "created_at":            item.get("created_at") or "",
             })
             count += 1
@@ -479,9 +479,9 @@ def get_trending_recipe_pool(per_category: int = 50) -> list:
                 "channel_profile_url": item.get("channel_profile_url") or "",
                 "url":           item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
                 "category":      item.get("category") or category,
-                "like_count":    int(item.get("like_count") or 0),
-                "comment_count": int(item.get("comment_count") or 0),
-                "share_count":   int(item.get("share_count") or 0),
+                "like_count":    item.get("like_count") or 0,
+                "comment_count": item.get("comment_count") or 0,
+                "share_count":   item.get("share_count") or 0,
                 "created_at":    item.get("created_at") or "",
             })
             count += 1
@@ -518,9 +518,9 @@ def get_latest_recipes(limit: int = 20) -> list:
             "url":                 item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
             "category":            item.get("category") or "",
             "created_at":          item.get("created_at") or "",
-            "like_count":          int(item.get("like_count") or 0),
-            "comment_count":       int(item.get("comment_count") or 0),
-            "share_count":         int(item.get("share_count") or 0),
+            "like_count":          item.get("like_count") or 0,
+            "comment_count":       item.get("comment_count") or 0,
+            "share_count":         item.get("share_count") or 0,
             "total_estimated_price": item.get("total_estimated_price"),
             "sharer_nickname":     item.get("sharer_nickname") or "",
         })
@@ -659,9 +659,9 @@ def list_recommended_videos_by_category(category: str, limit: int = 20):
                 "channel_profile_url":   item.get("channel_profile_url") or "",
                 "url":                   item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
                 "category":              item.get("category") or category,
-                "like_count":            int(item.get("like_count") or 0),
-                "comment_count":         int(item.get("comment_count") or 0),
-                "share_count":           int(item.get("share_count") or 0),
+                "like_count":            item.get("like_count") or 0,
+                "comment_count":         item.get("comment_count") or 0,
+                "share_count":           item.get("share_count") or 0,
                 "total_estimated_price": item.get("total_estimated_price"),
             }
         )

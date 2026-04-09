@@ -89,7 +89,7 @@ class RecipeRecommendationResponse(BaseModel):
     like_count: Optional[int] = 0
     comment_count: Optional[int] = 0
     share_count: Optional[int] = 0
-    total_estimated_price: Optional[str] = None
+    total_estimated_price: Optional[int] = None
 
 
 # 전체 레시피 최신순 단건 응답
@@ -105,7 +105,7 @@ class RecipeLatestResponse(BaseModel):
     like_count: Optional[int] = 0
     comment_count: Optional[int] = 0
     share_count: Optional[int] = 0
-    total_estimated_price: Optional[str] = None
+    total_estimated_price: Optional[int] = None
     sharer_nickname: Optional[str] = ""
 
 

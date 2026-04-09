@@ -3,6 +3,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { auth } from './firebase';
 
 const BASE_URL = 'https://mfxiwq8mpg.execute-api.ap-northeast-2.amazonaws.com';
 
@@ -240,22 +241,23 @@ type RequestOptions = RequestInit & {
 };
 
 async function getStoredAccessToken(): Promise<string | undefined> {
-  // 1. 웹 환경일 때
-  if (Platform.OS === 'web') {
-    const token =
-      (await AsyncStorage.getItem('accessToken')) ||
-      (await AsyncStorage.getItem('access_token')) ||
-      undefined;
-    return token;
+  // Firebase 현재 유저가 있으면 항상 최신 토큰을 가져옴 (만료 시 자동 갱신)
+  const user = auth.currentUser;
+  if (user) {
+    try {
+      return await user.getIdToken();
+    } catch (error) {
+      console.error('Firebase 토큰 갱신 실패:', error);
+    }
   }
 
-  // 2. 모바일(앱) 환경일 때
+  // Firebase 유저가 아직 로드 안 된 경우 저장된 토큰으로 폴백
+  if (Platform.OS === 'web') {
+    return (await AsyncStorage.getItem('accessToken')) || undefined;
+  }
+
   try {
-    const token =
-      (await SecureStore.getItemAsync('accessToken')) ||
-      (await SecureStore.getItemAsync('access_token')) ||
-      undefined;
-    return token;
+    return (await SecureStore.getItemAsync('accessToken')) || undefined;
   } catch (error) {
     console.error('SecureStore 에러:', error);
     return undefined;
@@ -639,7 +641,7 @@ export async function postRecommendRecipes(answers: Record<string, any>) {
 
 export async function getFridgeRecipes(ingredients: string[]) {
   const token = await getStoredAccessToken();
-  
+
   // 백엔드 명세에 따라 다르겠지만, 보통 이런 식으로 재료를 보냅니다.
   return request<any>('/api/ai/fridge-recommend', {
     method: 'POST',
@@ -651,7 +653,7 @@ export async function getFridgeRecipes(ingredients: string[]) {
 // 냉장고 파먹기 재료를 기반으로 레시피 검색 요청
 export async function postFridgeRecommend(ingredients: string[]) {
   const token = await getStoredAccessToken();
-  
+
   // 친구분이 만든 recommend API 형식을 빌려 쓰되, 질문 ID를 'ingredients'로 가정해서 보냅니다.
   // (※ 백엔드 설계에 따라 'ingredients' 대신 다른 키값을 써야 할 수도 있습니다.)
   return request<any>('/api/ai/recommend', {
@@ -663,4 +665,3 @@ export async function postFridgeRecommend(ingredients: string[]) {
     }),
     token,
   });
-}
