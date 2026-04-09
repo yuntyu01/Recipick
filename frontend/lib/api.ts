@@ -582,7 +582,7 @@ export function buildUserHistoryPayloadFromRecipe(
 export type AiAskRequest = {
   video_id: string;
   question: string;
-  current_step: number; 
+  current_step: number;
 };
 
 export type AiAskResponse = {
@@ -597,6 +597,30 @@ export async function askAi(body: AiAskRequest): Promise<AiAskResponse> {
   return request<AiAskResponse>('/api/ai/ask', {
     method: 'POST',
     body: JSON.stringify(body),
+    token,
+  });
+}
+
+/* =========================
+ * 메뉴 추천(Flow) API
+ * ========================= */
+
+// 1. 질문 목록 가져오기
+export async function getRecommendQuestions() {
+  // 백엔드 prefix가 /api/ai 이므로 주소를 맞춥니다.
+  return request<any>('/api/ai/recommend/questions', {
+    method: 'GET',
+  });
+}
+
+// 2. 답변 제출하고 레시피 추천받기
+export async function postRecommendRecipes(answers: Record<string, any>) {
+  const token = await getStoredAccessToken();
+
+  // 백엔드 엔드포인트가 /recommend 이므로 주소를 맞춥니다.
+  return request<any>('/api/ai/recommend', {
+    method: 'POST',
+    body: JSON.stringify({ answers }),
     token,
   });
 }

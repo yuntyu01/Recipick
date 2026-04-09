@@ -244,9 +244,9 @@ export default function Home() {
       (await SecureStore.getItemAsync('access_token'));
   }
 
-  // 💡 수정: 에러를 던지지 않고 null을 반환합니다. 
+  // 💡 수정: 에러를 던지지 않고 null을 반환합니다.
   // 그래야 로그인이 안 된 사용자도 홈 화면을 볼 수 있습니다.
-  return token || null; 
+  return token || null;
 };;
 
   const getCurrentUserId = async () => {
@@ -467,7 +467,7 @@ export default function Home() {
 
         // 2. 상태 업데이트
         setUserId(resolvedUserId);
-        
+
         // 3. null일 경우 undefined를 넘겨서 loadHomeFeed의 타입 에러를 방지합니다.
         await loadHomeFeed(resolvedUserId || undefined);
       } catch (e: any) {
@@ -519,7 +519,7 @@ export default function Home() {
           setUserId(resolvedUserId);
         } catch (e) {
           // 토큰이 없어도 에러를 던지지 않고 null로 둡니다.
-          let resolvedUserId = null; 
+          let resolvedUserId = null;
           console.log('비로그인 상태로 분석을 진행합니다.');
         }
       }
@@ -775,7 +775,7 @@ export default function Home() {
         )}
       />
 
-      <SectionHeader title="Recipick! 추천 레시피" onPressRight={() => router.push('/category/한식')} />
+      <SectionHeader title="Recipick! 인기 레시피" onPressRight={() => router.push('/category/한식')} />
             <FlatList
               horizontal
               data={recommendRecipes}
