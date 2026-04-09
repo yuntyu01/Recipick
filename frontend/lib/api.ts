@@ -3,6 +3,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { auth } from './firebase';
 
 const BASE_URL = 'https://mfxiwq8mpg.execute-api.ap-northeast-2.amazonaws.com';
 
@@ -123,6 +124,10 @@ export type RecommendationItem = {
   channel_profile_url?: string;
   url: string;
   category: string;
+  like_count?: string | number;
+  comment_count?: string | number;
+  share_count?: string | number;
+  total_estimated_price?: string | number;
 };
 
 export type RecommendationResponse =
@@ -231,34 +236,35 @@ export type FirebaseAuthResponse = {
  * 공통 request 함수
  * ========================= */
 
-type RequestOptions = RequestInit & {
-  token?: string;
+interface RequestOptions extends RequestInit {
+  token?: string | null;
 };
 
 async function getStoredAccessToken(): Promise<string | undefined> {
-  // 1. 웹 환경일 때
-  if (Platform.OS === 'web') {
-    const token =
-      (await AsyncStorage.getItem('accessToken')) ||
-      (await AsyncStorage.getItem('access_token')) ||
-      undefined;
-    return token;
+  // Firebase 현재 유저가 있으면 항상 최신 토큰을 가져옴 (만료 시 자동 갱신)
+  const user = auth.currentUser;
+  if (user) {
+    try {
+      return await user.getIdToken();
+    } catch (error) {
+      console.error('Firebase 토큰 갱신 실패:', error);
+    }
   }
 
-  // 2. 모바일(앱) 환경일 때
+  // Firebase 유저가 아직 로드 안 된 경우 저장된 토큰으로 폴백
+  if (Platform.OS === 'web') {
+    return (await AsyncStorage.getItem('accessToken')) || undefined;
+  }
+
   try {
-    const token =
-      (await SecureStore.getItemAsync('accessToken')) ||
-      (await SecureStore.getItemAsync('access_token')) ||
-      undefined;
-    return token;
+    return (await SecureStore.getItemAsync('accessToken')) || undefined;
   } catch (error) {
     console.error('SecureStore 에러:', error);
     return undefined;
   }
 }
 
-async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
+export async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const { token, headers, ...restOpts } = opts ?? {};
 
@@ -310,8 +316,11 @@ async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
     const msg =
       (json && (json.detail || json.message || json.error)) ||
       `HTTP ${res.status} ${res.statusText}`;
-
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP 에러! 상태코드: ${res.status}`);
   }
 
   return json as T;
@@ -460,6 +469,10 @@ export interface LatestRecipe {
   url: string;
   category: string;
   created_at: string;
+  sharer_nickname?: string;
+  like_count?: string | number;
+  comment_count?: string | number;
+  share_count?: string | number;
 }
 
 export async function getLatestRecipes(limit = 20): Promise<LatestRecipe[]> {
@@ -617,7 +630,6 @@ export async function getRecommendQuestions() {
 export async function postRecommendRecipes(answers: Record<string, any>) {
   const token = await getStoredAccessToken();
 
-  // 백엔드 엔드포인트가 /recommend 이므로 주소를 맞춥니다.
   return request<any>('/api/ai/recommend', {
     method: 'POST',
     body: JSON.stringify({ answers }),
@@ -629,30 +641,25 @@ export async function postRecommendRecipes(answers: Record<string, any>) {
  * 냉장고 파먹기 전용 API
  * ========================= */
 
+// 1. getFridgeRecipes 수정 (GET 방식으로 변경)
 export async function getFridgeRecipes(ingredients: string[]) {
   const token = await getStoredAccessToken();
-  
-  // 백엔드 명세에 따라 다르겠지만, 보통 이런 식으로 재료를 보냅니다.
-  return request<any>('/api/ai/fridge-recommend', {
-    method: 'POST',
-    body: JSON.stringify({ ingredients }),
+  const ingredientString = ingredients.join(',');
+
+  return request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+    method: 'GET',
     token,
   });
 }
 
-// 냉장고 파먹기 재료를 기반으로 레시피 검색 요청
+// 2. postFridgeRecommend 수정 (팀장님 피드백 반영 및 GET 변경)
+// 팀장님이 'search' API를 쓰라고 하셨으니, 이 함수도 같은 주소를 바라보게 합니다.
 export async function postFridgeRecommend(ingredients: string[]) {
   const token = await getStoredAccessToken();
-  
-  // 친구분이 만든 recommend API 형식을 빌려 쓰되, 질문 ID를 'ingredients'로 가정해서 보냅니다.
-  // (※ 백엔드 설계에 따라 'ingredients' 대신 다른 키값을 써야 할 수도 있습니다.)
-  return request<any>('/api/ai/recommend', {
-    method: 'POST',
-    body: JSON.stringify({
-      answers: {
-        "ingredients": ingredients // 입력받은 재료 배열
-      }
-    }),
+  const ingredientString = ingredients.join(',');
+
+  return request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+    method: 'GET',
     token,
   });
 }

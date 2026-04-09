@@ -28,7 +28,7 @@ export default function AnalyzingScreen() {
           router.replace({
             pathname: '/fridge-result',
             params: { 
-              recipeData: JSON.stringify(res.recipes || []), // 결과 배열을 문자열로 변환
+              recipeData: JSON.stringify(res.recipes || res || []), // 결과 배열을 문자열로 변환
               ingredients: ingredients 
             }
           });

@@ -40,9 +40,8 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      
+      "react-native-vision-camera"
     ],
-    
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

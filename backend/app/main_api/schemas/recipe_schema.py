@@ -86,6 +86,10 @@ class RecipeRecommendationResponse(BaseModel):
     channel_profile_url: Optional[str] = ""
     url: str
     category: str
+    like_count: Optional[int] = 0
+    comment_count: Optional[int] = 0
+    share_count: Optional[int] = 0
+    total_estimated_price: Optional[int] = None
 
 
 # 전체 레시피 최신순 단건 응답
@@ -98,6 +102,11 @@ class RecipeLatestResponse(BaseModel):
     url: str
     category: str
     created_at: str
+    like_count: Optional[int] = 0
+    comment_count: Optional[int] = 0
+    share_count: Optional[int] = 0
+    total_estimated_price: Optional[int] = None
+    sharer_nickname: Optional[str] = ""
 
 
 # 재료 검색 결과의 연관 재료 집계 단건 (이름 + 등장 횟수)

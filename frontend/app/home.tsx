@@ -632,7 +632,7 @@ export default function Home() {
         {/* --- 🟢 [새로운] 상단 통합 영역 (시안 반영) --- */}
         <View style={styles.topSectionFull}>
           <View style={{ height: insets.top }} />
-            <View style={styles.navRow}>
+          <View style={styles.navRow}>
             <View style={{ width: s(40) }} /> {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
             <Text style={styles.logoInline}>Recipick!</Text>
             <TouchableOpacity

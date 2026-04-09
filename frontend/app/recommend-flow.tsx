@@ -161,7 +161,7 @@ export default function RecommendFlow() {
                 <TouchableOpacity
                   key={index}
                   style={styles.resultCard}
-                  onPress={() => router.push({ pathname: '/recipe-detail', params: { id: item.id, videoId: item.video_id } })}
+                  onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: item.id, videoId: item.video_id } })}
                 >
                   <View style={styles.thumbWrapper}>
                     <Image source={{ uri: item.thumbnail_url }} style={styles.resultThumb} />
