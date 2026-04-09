@@ -20,6 +20,7 @@ export default function RootLayout() {
         <Stack.Screen name="cook" />
         <Stack.Screen name="recipe/[id]" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="fridge-recipe" options={{ title: '냉장고 파먹기' }} />
       </Stack>
 
       <StatusBar style="auto" />

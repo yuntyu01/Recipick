@@ -624,3 +624,35 @@ export async function postRecommendRecipes(answers: Record<string, any>) {
     token,
   });
 }
+
+/* =========================
+ * 냉장고 파먹기 전용 API
+ * ========================= */
+
+export async function getFridgeRecipes(ingredients: string[]) {
+  const token = await getStoredAccessToken();
+  
+  // 백엔드 명세에 따라 다르겠지만, 보통 이런 식으로 재료를 보냅니다.
+  return request<any>('/api/ai/fridge-recommend', {
+    method: 'POST',
+    body: JSON.stringify({ ingredients }),
+    token,
+  });
+}
+
+// 냉장고 파먹기 재료를 기반으로 레시피 검색 요청
+export async function postFridgeRecommend(ingredients: string[]) {
+  const token = await getStoredAccessToken();
+  
+  // 친구분이 만든 recommend API 형식을 빌려 쓰되, 질문 ID를 'ingredients'로 가정해서 보냅니다.
+  // (※ 백엔드 설계에 따라 'ingredients' 대신 다른 키값을 써야 할 수도 있습니다.)
+  return request<any>('/api/ai/recommend', {
+    method: 'POST',
+    body: JSON.stringify({
+      answers: {
+        "ingredients": ingredients // 입력받은 재료 배열
+      }
+    }),
+    token,
+  });
+}

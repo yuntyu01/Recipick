@@ -631,11 +631,8 @@ export default function Home() {
       >
         {/* --- 🟢 [새로운] 상단 통합 영역 (시안 반영) --- */}
         <View style={styles.topSectionFull}>
-          {/* (A) 상태바 영역 확보 (폰트 크기/색상 등은 기기 설정을 따름) */}
           <View style={{ height: insets.top }} />
-
-          {/* (B) 로고 & 프로필 영역 (시안처럼 여백 조정) */}
-          <View style={styles.navRow}>
+            <View style={styles.navRow}>
             <View style={{ width: s(40) }} /> {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
             <Text style={styles.logoInline}>Recipick!</Text>
             <TouchableOpacity
