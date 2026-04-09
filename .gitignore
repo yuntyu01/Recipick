@@ -20,7 +20,7 @@ expo-env.d.ts
 
 # Metro
 .metro-health-check*
-
+Microsoft/
 # debug
 npm-debug.*
 yarn-debug.*
@@ -33,7 +33,8 @@ yarn-error.*
 # local env files
 .env*.local
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
+.idea/
+.claude/
 # dependencies
 node_modules/
 

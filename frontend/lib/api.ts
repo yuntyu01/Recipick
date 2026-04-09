@@ -662,4 +662,3 @@ export async function postFridgeRecommend(ingredients: string[]) {
     method: 'GET',
     token,
   });
-}
