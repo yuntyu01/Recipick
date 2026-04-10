@@ -561,32 +561,6 @@ export default function Home() {
           />
         </View>
 
-        <Text style={styles.questionInline}>어떤 요리 찾고 있어요?</Text>
-
-        <FlatList
-          horizontal
-          data={CATEGORIES}
-          keyExtractor={(item) => `cat-${item.key}`}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryListInline}
-          ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.categoryItemInline}
-              onPress={() => router.push(`/category/${encodeURIComponent(String(item.key))}`)}
-            >
-              <Image
-                source={item.icon}
-                style={[styles.categoryImgInline, item.key === '분식' && { marginLeft: s(-8) }]}
-                resizeMode="contain"
-              />
-              <Text style={styles.categoryTextInline}>{item.key}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      </View>
-
       {/* --- 메뉴 영역 (여기서 높이를 강제 고정하여 절대 튀지 않게 만듭니다) --- */}
       <View style={styles.menuSectionWrap}>
 
