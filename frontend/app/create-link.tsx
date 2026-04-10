@@ -4,6 +4,7 @@ import {
   Dimensions,
   Image,
   Linking,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -225,18 +226,23 @@ export default function CreateLink() {
     });
   };
 
+  const stepIngredients = useMemo(() => {
+    if (!steps.length || !ingredients.length) return {};
+    const map: Record<number, Ingredient[]> = {};
+    steps.forEach((s, idx) => {
+      const body = s.body.toLowerCase();
+      const matched = ingredients.filter(ing => body.includes(ing.name.toLowerCase()));
+      if (matched.length > 0) map[idx] = matched;
+    });
+    return map;
+  }, [steps, ingredients]);
+
   const contentBottomPad = CTA_BTN_H + CTA_GAP + Math.max(insets.bottom, 10) + 18;
-  const FIXED_TOP_H = TOPBAR_H + VIDEO_H + META_H + TAB_H;
+  const FIXED_TOP_H = VIDEO_H;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <View style={[styles.fixedTop, { paddingTop: insets.top }]}>
-        <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={14} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color={TEXT} />
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.videoWrap}>
           <YoutubePlayer
             ref={playerRef}
@@ -244,30 +250,8 @@ export default function CreateLink() {
             play={false}
             videoId={videoId}
           />
-        </View>
-
-        <View style={styles.metaFixed}>
-          <Text style={styles.titleText} numberOfLines={2}>
-            {title}
-          </Text>
-
-          <View style={styles.channelRow}>
-            <View style={styles.avatar} />
-            <Text style={styles.channelText} numberOfLines={1}>
-              {channelName}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.tabsWrapFixed}>
-          <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('recipe')} style={styles.tabBtn}>
-            <Text style={[styles.tabText, tab === 'recipe' && styles.tabTextActive]}>레시피</Text>
-            <View style={[styles.tabLine, tab === 'recipe' && styles.tabLineActive]} />
-          </TouchableOpacity>
-
-          <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('ingredient')} style={styles.tabBtn}>
-            <Text style={[styles.tabText, tab === 'ingredient' && styles.tabTextActive]}>재료</Text>
-            <View style={[styles.tabLine, tab === 'ingredient' && styles.tabLineActive]} />
+          <TouchableOpacity onPress={() => router.back()} hitSlop={14} style={styles.videoBackBtn}>
+            <Ionicons name="arrow-back" size={22} color={WHITE} />
           </TouchableOpacity>
         </View>
       </View>
@@ -284,6 +268,30 @@ export default function CreateLink() {
         })}
         scrollEventThrottle={16}
       >
+        <View style={styles.metaSection}>
+          <Text style={styles.titleText} numberOfLines={2}>
+            {title}
+          </Text>
+
+          <View style={styles.channelRow}>
+            <View style={styles.avatar} />
+            <Text style={styles.channelText} numberOfLines={1}>
+              {channelName}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.tabsWrap}>
+          <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('recipe')} style={styles.tabBtn}>
+            <Text style={[styles.tabText, tab === 'recipe' && styles.tabTextActive]}>레시피</Text>
+            <View style={[styles.tabLine, tab === 'recipe' && styles.tabLineActive]} />
+          </TouchableOpacity>
+
+          <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('ingredient')} style={styles.tabBtn}>
+            <Text style={[styles.tabText, tab === 'ingredient' && styles.tabTextActive]}>재료</Text>
+            <View style={[styles.tabLine, tab === 'ingredient' && styles.tabLineActive]} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.contentWrap}>
           {tab === 'recipe' ? (
             <View style={{ paddingHorizontal: PAD_LR }}>
@@ -297,20 +305,34 @@ export default function CreateLink() {
                       activeOpacity={0.92}
                       onPress={() => {
                         setActiveStepIdx(idx);
-                        if (s.videoTimestamp) handleSeekTo(s.videoTimestamp); // ✅ 시간을 누르면 영상 이동!
+                        if (s.videoTimestamp) handleSeekTo(s.videoTimestamp);
                       }}
-                      style={[styles.stepCard, idx > 0 && { marginTop: 14 }]}
+                      style={[styles.stepCard, idx > 0 && { marginTop: 10 }, active && styles.stepCardActive]}
                     >
-                      <Text style={[styles.stepTitle, active && { color: BRAND }]}>{s.title}</Text>
-
-                      {!!s.videoTimestamp && (
-                        <Text style={styles.stepSubText}>영상 시점 {s.videoTimestamp}</Text>
-                      )}
+                      <View style={styles.stepHeader}>
+                        <Text style={[styles.stepTitle, active && { color: BRAND }]}>{s.title}</Text>
+                        {!!s.videoTimestamp && (
+                          <Text style={styles.stepTimestamp}>{s.videoTimestamp}</Text>
+                        )}
+                      </View>
 
                       <Text style={styles.stepBody}>{s.body}</Text>
 
                       {!!s.timerSec && s.timerSec !== '0' && (
                         <Text style={styles.stepTimer}>타이머 {s.timerSec}초</Text>
+                      )}
+
+                      {stepIngredients[idx] && stepIngredients[idx].length > 0 && (
+                        <View style={styles.stepIngRow}>
+                          {stepIngredients[idx].map((ing) => (
+                            <View key={ing.id} style={styles.stepIngTag}>
+                              <Text style={styles.stepIngName}>{ing.name}</Text>
+                              {!!ing.amount && (
+                                <Text style={styles.stepIngAmount}>{ing.amount}</Text>
+                              )}
+                            </View>
+                          ))}
+                        </View>
                       )}
                     </TouchableOpacity>
                   );
@@ -324,6 +346,12 @@ export default function CreateLink() {
           ) : (
             <View>
               <Text style={styles.ingHint}>준비된 재료는 터치해 주세요!</Text>
+
+              <View style={styles.ingHeaderRow}>
+                <Text style={styles.ingHeaderName}>재료</Text>
+                <Text style={styles.ingHeaderAmount}>용량</Text>
+                <Text style={styles.ingHeaderPrice}>가격</Text>
+              </View>
 
               <View style={styles.ingListWrap}>
                 {ingredients.length > 0 ? (
@@ -404,14 +432,21 @@ export default function CreateLink() {
       </Animated.ScrollView>
 
       <View style={[styles.bottomCta, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.startBtn, !recipeDataParam && styles.startBtnDisabled]}
+        <Pressable
           onPress={handleStartCook}
           disabled={!recipeDataParam}
+          style={({ pressed }) => [
+            styles.startBtn,
+            pressed && styles.startBtnPressed,
+            !recipeDataParam && styles.startBtnDisabled,
+          ]}
         >
-          <Text style={styles.startText}>{recipeDataParam ? '요리 시작' : '레시피 없음'}</Text>
-        </TouchableOpacity>
+          {({ pressed }) => (
+            <Text style={[styles.startText, pressed && styles.startTextPressed]}>
+              {recipeDataParam ? '요리 시작' : '레시피 없음'}
+            </Text>
+          )}
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -446,6 +481,18 @@ const styles = StyleSheet.create({
     width: SCREEN_W,
     height: VIDEO_H,
     backgroundColor: '#DDE6E6',
+  },
+  videoBackBtn: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   videoImg: { width: '100%', height: '100%' },
   playOverlay: {
@@ -542,23 +589,44 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
 
+  metaSection: {
+    backgroundColor: WHITE,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  tabsWrap: {
+    height: TAB_H,
+    backgroundColor: WHITE,
+    flexDirection: 'row',
+    width: '100%',
+    alignItems: 'flex-end',
+  },
+
   stepCard: {
-    backgroundColor: BG,
-    borderRadius: 18,
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: BRAND,
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  stepCardActive: {},
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
   },
   stepTitle: {
     fontSize: 20,
     fontWeight: '900',
     color: TEXT,
-    marginBottom: 6,
   },
-  stepSubText: {
+  stepTimestamp: {
     fontSize: 11,
     fontWeight: '700',
     color: MUTED,
-    marginBottom: 6,
   },
   stepBody: {
     fontSize: 15,
@@ -571,6 +639,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: BRAND,
+  },
+  stepIngRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 'auto',
+    paddingTop: 10,
+  },
+  stepIngTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BG,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    gap: 4,
+  },
+  stepIngName: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  stepIngAmount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: MUTED,
   },
 
   bottomCta: {
@@ -587,8 +681,14 @@ const styles = StyleSheet.create({
     height: CTA_BTN_H,
     borderRadius: 30,
     backgroundColor: BRAND,
+    borderWidth: 2,
+    borderColor: BRAND,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  startBtnPressed: {
+    backgroundColor: WHITE,
+    borderColor: BRAND,
   },
   startBtnDisabled: {
     opacity: 0.45,
@@ -598,13 +698,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  startTextPressed: {
+    color: BRAND,
+  },
 
   ingHint: {
-    marginTop: 2,
+    marginTop: 4,
     marginLeft: 30,
     fontSize: 10,
     fontWeight: '700',
     color: '#8A9B9A',
+  },
+  ingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 34,
+    paddingVertical: 8,
+    marginTop: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8EDED',
+  },
+  ingHeaderName: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  ingHeaderAmount: {
+    width: 70,
+    textAlign: 'right',
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  ingHeaderPrice: {
+    width: 80,
+    textAlign: 'right',
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
   },
   ingListWrap: {
     marginTop: 6,
@@ -614,12 +746,12 @@ const styles = StyleSheet.create({
 
   ingBox: {
     width: '100%',
-    borderRadius: ING_RADIUS,
     backgroundColor: WHITE,
-    borderWidth: ING_BORDER_W,
-    borderColor: BORDER,
+    borderWidth: 1.5,
+    borderColor: '#E8EDED',
+    borderRadius: 10,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 12,
     overflow: 'hidden',
   },
 
@@ -629,28 +761,28 @@ const styles = StyleSheet.create({
   },
   ingName: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '900',
     color: TEXT,
     paddingRight: 8,
   },
   ingAmount: {
-    width: 80,
+    width: 70,
     textAlign: 'right',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
     color: TEXT,
   },
   ingPrice: {
-    width: 90,
+    width: 80,
     textAlign: 'right',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
     color: TEXT,
   },
 
   selectedText: { color: BRAND },
-  selectedBorder: { borderColor: BRAND },
+  selectedBorder: { borderColor: BRAND, borderWidth: 1.5 },
 
   subToggleBtn: {
     marginTop: 6,
@@ -693,16 +825,16 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   subAmount: {
-    width: 80,
+    width: 70,
     textAlign: 'right',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     color: TEXT,
   },
   subPrice: {
-    width: 90,
+    width: 80,
     textAlign: 'right',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
     color: TEXT,
   },

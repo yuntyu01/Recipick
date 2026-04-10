@@ -663,3 +663,21 @@ export async function postFridgeRecommend(ingredients: string[]) {
     token,
   });
 }
+
+/* =========================
+ * 레시피 키워드 검색 API
+ * ========================= */
+
+export type SearchResponse = {
+  recipes: LatestRecipe[];
+  available_ingredients?: { name: string; count: number }[];
+};
+
+export async function searchRecipes(query: string): Promise<SearchResponse> {
+  const token = await getStoredAccessToken();
+
+  return request<SearchResponse>(
+    `/api/recipes/search?ingredients=${encodeURIComponent(query)}`,
+    { method: 'GET', token }
+  );
+}

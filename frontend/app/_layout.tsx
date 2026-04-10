@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="signup" />
         <Stack.Screen name="home" />
+        <Stack.Screen name="search" />
         <Stack.Screen name="my-recipes" />
         <Stack.Screen name="mypage" />
         <Stack.Screen name="category/[name]" />

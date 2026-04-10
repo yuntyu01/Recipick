@@ -45,12 +45,24 @@ export default function FridgeRecipeScreen() {
         fetchInitialIngredients();
     }, []);
 
-    // 재료 추가 로직
-    const addIngredient = (name: string) => {
+    // 재료 추가 로직 (추가 후 API로 연관 재료도 갱신)
+    const addIngredient = async (name: string) => {
         const trimmed = name.trim();
-        if (trimmed && !ingredientsList.includes(trimmed)) {
-            setIngredientsList([...ingredientsList, trimmed]);
-            setIngredient('');
+        if (!trimmed || ingredientsList.includes(trimmed)) return;
+        const nextList = [...ingredientsList, trimmed];
+        setIngredientsList(nextList);
+        setIngredient('');
+
+        try {
+            const ingredientString = nextList.join(',');
+            const res = await request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+                method: 'GET'
+            });
+            if (res && res.available_ingredients) {
+                setSuggestedIngredients(res.available_ingredients);
+            }
+        } catch (e) {
+            console.log("재료 추가 후 연관 재료 갱신 실패:", e);
         }
     };
 
@@ -84,8 +96,25 @@ export default function FridgeRecipeScreen() {
         }
     };
 
-    const removeIngredient = (name: string) => {
-        setIngredientsList(ingredientsList.filter(item => item !== name));
+    const removeIngredient = async (name: string) => {
+        const nextList = ingredientsList.filter(item => item !== name);
+        setIngredientsList(nextList);
+
+        if (nextList.length > 0) {
+            try {
+                const ingredientString = nextList.join(',');
+                const res = await request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+                    method: 'GET'
+                });
+                if (res && res.available_ingredients) {
+                    setSuggestedIngredients(res.available_ingredients);
+                }
+            } catch (e) {
+                console.log("재료 제거 후 연관 재료 갱신 실패:", e);
+            }
+        } else {
+            fetchInitialIngredients();
+        }
     };
 
     // [피드백 1, 2번] 검색 버튼 클릭 핸들러 (로딩 페이지 제거)
@@ -143,35 +172,40 @@ export default function FridgeRecipeScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    {/* [피드백 3번] 터치 가능한 재료 리스트 (인기순) */}
-                    <Text style={styles.listLabel}>많이 찾는 재료</Text>
+                    {/* 선택된 재료 (입력창 바로 아래) */}
+                    {ingredientsList.length > 0 && (
+                        <>
+                            <Text style={styles.listLabel}>입력한 재료 ({ingredientsList.length})</Text>
+                            <View style={styles.tagContainer}>
+                                {ingredientsList.map((item, index) => (
+                                    <View key={index} style={styles.tag}>
+                                        <Text style={styles.tagText}>{item}</Text>
+                                        <TouchableOpacity onPress={() => removeIngredient(item)}>
+                                            <Ionicons name="close-circle" size={18} color="#54CDA4" />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))}
+                            </View>
+                        </>
+                    )}
+
+                    {/* 추천 재료 (이미 선택된 재료는 제외) */}
+                    <Text style={styles.listLabel}>
+                        {ingredientsList.length > 0 ? '이런 재료는 어때요?' : '많이 찾는 재료'}
+                    </Text>
                     <View style={styles.suggestionContainer}>
-                        {suggestedIngredients.map((item, idx) => (
-                            <TouchableOpacity 
-                                key={idx} 
-                                style={[
-                                    styles.suggestTag,
-                                    ingredientsList.includes(item.name) && styles.activeSuggestTag
-                                ]}
+                        {suggestedIngredients
+                            .filter(item => !ingredientsList.includes(item.name))
+                            .map((item, idx) => (
+                            <TouchableOpacity
+                                key={idx}
+                                style={styles.suggestTag}
                                 onPress={() => handleIngredientTouch(item.name)}
                             >
-                                <Text style={[styles.suggestTagText, ingredientsList.includes(item.name) && styles.activeSuggestText]}>
+                                <Text style={styles.suggestTagText}>
                                     {item.name}
                                 </Text>
                             </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* 선택된 재료 요약 */}
-                    <Text style={styles.listLabel}>입력한 재료 ({ingredientsList.length})</Text>
-                    <View style={styles.tagContainer}>
-                        {ingredientsList.map((item, index) => (
-                            <View key={index} style={styles.tag}>
-                                <Text style={styles.tagText}>{item}</Text>
-                                <TouchableOpacity onPress={() => removeIngredient(item)}>
-                                    <Ionicons name="close-circle" size={18} color="#54CDA4" />
-                                </TouchableOpacity>
-                            </View>
                         ))}
                     </View>
                 </View>
@@ -187,7 +221,7 @@ export default function FridgeRecipeScreen() {
                         {isSearching ? (
                             <ActivityIndicator color="white" />
                         ) : (
-                            <Text style={styles.nextBtnText}>레시피 추천받기</Text>
+                            <Text style={styles.nextBtnText}>레시피 찾기</Text>
                         )}
                     </TouchableOpacity>
                 </View>

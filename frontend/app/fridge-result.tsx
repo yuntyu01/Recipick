@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { getRecipe } from '../lib/api';
 
 const { width } = Dimensions.get('window');
 const s = (v: number) => Math.round(v * (width / 430));
@@ -25,6 +26,26 @@ export default function FridgeResultScreen() {
             return [];
         }
     }, [recipeData]);
+
+    const [prices, setPrices] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+        recommendations.forEach(async (item: any) => {
+            const videoId = item.video_id || (item.url ? item.url.split('v=')[1] : '');
+            if (!videoId) return;
+            try {
+                const detail = await getRecipe(videoId);
+                if (detail.status === 'COMPLETED' && detail.data?.total_estimated_price) {
+                    const raw = String(detail.data.total_estimated_price).replace(/[^\d.-]/g, '');
+                    const num = Number(raw);
+                    const formatted = Number.isNaN(num) ? String(detail.data.total_estimated_price) : `${num.toLocaleString('ko-KR')}원`;
+                    setPrices(prev => ({ ...prev, [videoId]: formatted }));
+                }
+            } catch (e) {
+                // 상세 조회 실패 시 무시
+            }
+        });
+    }, [recommendations]);
 
     const openYoutube = (url: string) => {
         if (!url) return;
@@ -88,10 +109,15 @@ export default function FridgeResultScreen() {
                                         <Text style={styles.resultTitle} numberOfLines={2}>
                                             {item.title || "제목 없는 레시피"}
                                         </Text>
-                                        
-                                        <Text style={styles.resultSub}>
-                                            {item.channel_name || item.channel || "추천 레시피"}
-                                        </Text>
+
+                                        <View style={styles.subRow}>
+                                            <Text style={styles.resultSub} numberOfLines={1}>
+                                                {item.channel_name || item.channel || "추천 레시피"}
+                                            </Text>
+                                            {!!prices[videoId] && (
+                                                <Text style={styles.priceText}>{prices[videoId]}</Text>
+                                            )}
+                                        </View>
                                     </TouchableOpacity>
                                 );
                             })}
@@ -99,7 +125,7 @@ export default function FridgeResultScreen() {
                     )}
 
                     <TouchableOpacity style={styles.retryBtn} onPress={() => router.replace('/fridge-recipe')}>
-                        <Text style={styles.retryBtnText}>다시 추천받기</Text>
+                        <Text style={styles.retryBtnText}>다시 레시피 찾기</Text>
                     </TouchableOpacity>
                 </View>
             </ScrollView>
@@ -125,8 +151,10 @@ const styles = StyleSheet.create({
     thumbWrapper: { position: 'relative' },
     resultThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: s(12), backgroundColor: '#F3F6F6' },
     playIconBadge: { position: 'absolute', bottom: s(8), right: s(8), backgroundColor: 'rgba(0,0,0,0.6)', width: s(24), height: s(24), borderRadius: s(12), justifyContent: 'center', alignItems: 'center' },
-    resultTitle: { fontSize: s(14), fontWeight: '700', marginTop: s(8), color: '#333', lineHeight: s(20) },
-    resultSub: { fontSize: s(12), color: '#8A9B9A', marginTop: s(4), fontWeight: '600' },
+    resultTitle: { fontSize: s(14), fontWeight: '700', marginTop: s(8), color: '#333', lineHeight: s(20), height: s(40) },
+    subRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: s(4), gap: s(4) },
+    resultSub: { fontSize: s(12), color: '#8A9B9A', fontWeight: '600', flexShrink: 1 },
+    priceText: { fontSize: s(11), fontWeight: '800', color: '#4C6664', opacity: 0.7, flexShrink: 0 },
     retryBtn: { marginTop: s(20), height: s(50), borderRadius: s(12), borderWidth: 1.5, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: s(40) },
     retryBtnText: { fontSize: s(15), fontWeight: '700', color: '#64748B' },
     // ✅ 데이터 없을 때 스타일

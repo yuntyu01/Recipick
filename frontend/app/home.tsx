@@ -526,7 +526,8 @@ export default function Home() {
         <View style={styles.topSectionFull}>
           <View style={{ height: insets.top }} />
           <View style={styles.navRow}>
-            <View style={{ width: s(40) }} /> {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
+            {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
+            <View style={{ width: s(40) }} />
             <Text style={styles.logoInline}>Recipick!</Text>
             <TouchableOpacity
               onPress={() => router.push('/mypage')}
@@ -536,6 +537,16 @@ export default function Home() {
               <Ionicons name="person" size={s(20)} color="#000" />
             </TouchableOpacity>
           </View>
+
+          {/* (B) 검색 바 */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.searchBar}
+            onPress={() => router.push('/search')}
+          >
+            <Ionicons name="search" size={s(16)} color="#9AA8A7" />
+            <Text style={styles.searchPlaceholder}>검색</Text>
+          </TouchableOpacity>
 
           {/* (C) 질문 텍스트 */}
           <Text style={styles.questionInline}>어떤 요리 찾고 있어요?</Text>
@@ -635,7 +646,7 @@ export default function Home() {
                     <View style={styles.createNoticeNewInline}>
                       <Text style={styles.createBulletNewInline}>• 지원 가능: 유튜브</Text>
                       <Text style={styles.createBulletNewInline}>• 30분 이상 영상은 분석이 불가능해요</Text>
-                      <Text style={styles.createBulletNewInline}>• 분석에는 약 3분의 시간이 걸립니다</Text>
+                      <Text style={styles.createBulletNewInline}>• 분석에는 약 30초의 시간이 걸립니다</Text>
                     </View>
                   )}
                 </View>
@@ -823,6 +834,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F3F6F6',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F6F6',
+    borderRadius: s(10),
+    marginHorizontal: s(20),
+    marginBottom: s(14),
+    paddingHorizontal: s(14),
+    paddingVertical: s(10),
+    gap: s(8),
+  },
+  searchPlaceholder: {
+    fontSize: s(14),
+    fontWeight: '600',
+    color: '#9AA8A7',
   },
   questionInline: {
     fontSize: s(18),

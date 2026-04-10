@@ -49,6 +49,12 @@ type Step = {
     timerSec?: number;
 };
 
+type Ingredient = {
+    id: string;
+    name: string;
+    amount: string;
+};
+
 function firstString(v: string | string[] | undefined) {
     if (!v) return '';
     return Array.isArray(v) ? (v[0] ?? '') : v;
@@ -120,6 +126,26 @@ export default function CookScreen() {
             timerSec: Number(item.timer_sec ?? 0),
         }));
     }, [recipeData]);
+
+    const ingredients: Ingredient[] = useMemo(() => {
+        if (!recipeData?.ingredients || !Array.isArray(recipeData.ingredients)) return [];
+        return recipeData.ingredients.map((item: any, index: number) => ({
+            id: item?.name ? `${item.name}-${index}` : `ingredient-${index}`,
+            name: String(item?.name ?? '재료').trim(),
+            amount: String(item?.amount ?? '').trim(),
+        }));
+    }, [recipeData]);
+
+    const stepIngredients = useMemo(() => {
+        if (!steps.length || !ingredients.length) return {};
+        const map: Record<number, Ingredient[]> = {};
+        steps.forEach((s, idx) => {
+            const body = s.body.toLowerCase();
+            const matched = ingredients.filter(ing => body.includes(ing.name.toLowerCase()));
+            if (matched.length > 0) map[idx] = matched;
+        });
+        return map;
+    }, [steps, ingredients]);
 
     const [activeIdx, setActiveIdx] = useState(0);
     const webRef = useRef<WebView>(null);
@@ -456,70 +482,46 @@ export default function CookScreen() {
 
     return (
         <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-            <View style={[styles.header, { height: insets.top + 44, paddingTop: insets.top }]}>
-                <TouchableOpacity onPress={() => router.back()} hitSlop={14} style={styles.backBtn}>
-                    <Ionicons name="arrow-back" size={22} color={TEXT} />
-                </TouchableOpacity>
-
-                <View style={styles.headerRight}>
-                    <TouchableOpacity onPress={togglePlay} activeOpacity={0.8} style={styles.headerIconBtn}>
-                        <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color={TEXT} />
-                    </TouchableOpacity>
-
-                    <View style={styles.timerPill}>
-                        <Ionicons name="alarm-outline" size={14} color={TEXT} />
-                        <Text style={styles.timerPillText}>{formatMMSS(remainingSec)}</Text>
-                    </View>
-                </View>
-            </View>
-
-            <ScrollView
-                style={{ flex: 1, backgroundColor: BG }}
-                contentContainerStyle={{ paddingBottom: 150 }}
-                showsVerticalScrollIndicator={false}
-            >
+            <View style={[styles.fixedVideo, { paddingTop: insets.top }]}>
                 <View style={[styles.videoWrap, { width: VIDEO_W, height: VIDEO_H }]}>
                     {videoId ? (
                         <>
                             <YoutubePlayer
-    ref={playerRef}
-    height={VIDEO_H}
-    play={isPlaying}
-    videoId={videoId}
-    onChangeState={(state : string) => {
-        if (state === "ended") setIsPlaying(false);
-        if (state === "playing") setIsPlaying(true);
-        if (state === "paused") setIsPlaying(false);
-    }}
-    // 💡 안드로이드 재생 차단을 피하기 위한 마법의 설정
-    webViewProps={{
-        androidLayerType: "hardware",
-        allowsFullscreenVideo: true,
-        userAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-    }}
-    onReady={() => setVideoError(false)}
-    onError={(e : any) => {
-        console.log('[YOUTUBE ERROR]', e);
-        setVideoError(true);
-    }}
-/>
-
-{/* 에러가 났을 때만 보여주는 안내 화면 */}
-{videoError && (
-    <View style={styles.videoErrorOverlay}>
-        <Text style={styles.videoErrorTitle}>영상을 불러올 수 없어요</Text>
-        <Text style={styles.videoErrorSub}>
-            잠시 후 다시 시도하거나 유튜브에서 직접 열어보세요.
-        </Text>
-        <TouchableOpacity
-            style={styles.videoErrorBtn}
-            onPress={openYoutubeExternally}
-            activeOpacity={0.9}
-        >
-            <Text style={styles.videoErrorBtnText}>유튜브에서 열기</Text>
-        </TouchableOpacity>
-    </View>
-)}
+                                ref={playerRef}
+                                height={VIDEO_H}
+                                play={isPlaying}
+                                videoId={videoId}
+                                onChangeState={(state : string) => {
+                                    if (state === "ended") setIsPlaying(false);
+                                    if (state === "playing") setIsPlaying(true);
+                                    if (state === "paused") setIsPlaying(false);
+                                }}
+                                webViewProps={{
+                                    androidLayerType: "hardware",
+                                    allowsFullscreenVideo: true,
+                                    userAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+                                }}
+                                onReady={() => setVideoError(false)}
+                                onError={(e : any) => {
+                                    console.log('[YOUTUBE ERROR]', e);
+                                    setVideoError(true);
+                                }}
+                            />
+                            {videoError && (
+                                <View style={styles.videoErrorOverlay}>
+                                    <Text style={styles.videoErrorTitle}>영상을 불러올 수 없어요</Text>
+                                    <Text style={styles.videoErrorSub}>
+                                        잠시 후 다시 시도하거나 유튜브에서 직접 열어보세요.
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.videoErrorBtn}
+                                        onPress={openYoutubeExternally}
+                                        activeOpacity={0.9}
+                                    >
+                                        <Text style={styles.videoErrorBtnText}>유튜브에서 열기</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                         </>
                     ) : (
                         <View style={styles.videoFallback}>
@@ -533,9 +535,27 @@ export default function CookScreen() {
                             )}
                         </View>
                     )}
+                    <TouchableOpacity onPress={() => router.back()} hitSlop={14} style={styles.videoBackBtn}>
+                        <Ionicons name="arrow-back" size={22} color={WHITE} />
+                    </TouchableOpacity>
                 </View>
+            </View>
 
-        
+            <ScrollView
+                style={{ flex: 1, backgroundColor: BG }}
+                contentContainerStyle={{ paddingTop: VIDEO_H + insets.top, paddingBottom: 150 }}
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.controlRow}>
+                    <TouchableOpacity onPress={togglePlay} activeOpacity={0.8} style={styles.headerIconBtn}>
+                        <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color={TEXT} />
+                    </TouchableOpacity>
+
+                    <View style={styles.timerPill}>
+                        <Ionicons name="alarm-outline" size={14} color={TEXT} />
+                        <Text style={styles.timerPillText}>{formatMMSS(remainingSec)}</Text>
+                    </View>
+                </View>
 
                 <View style={styles.progressWrap}>
                     <View style={styles.progressRow}>
@@ -602,6 +622,19 @@ export default function CookScreen() {
                                         </View>
 
                                         <Text style={styles.stepBody}>{s.body}</Text>
+
+                                        {stepIngredients[idx] && stepIngredients[idx].length > 0 && (
+                                            <View style={styles.stepIngRow}>
+                                                {stepIngredients[idx].map((ing) => (
+                                                    <View key={ing.id} style={styles.stepIngTag}>
+                                                        <Text style={styles.stepIngName}>{ing.name}</Text>
+                                                        {!!ing.amount && (
+                                                            <Text style={styles.stepIngAmount}>{ing.amount}</Text>
+                                                        )}
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        )}
                                     </View>
                                 </TouchableOpacity>
                             );
@@ -820,24 +853,32 @@ const styles = StyleSheet.create({
         paddingVertical: 2,
     },
 
-    header: {
-        backgroundColor: BG,
+    fixedVideo: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        backgroundColor: '#000',
+    },
+    videoBackBtn: {
+        position: 'absolute',
+        top: 8,
+        left: 8,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        alignItems: 'center',
         justifyContent: 'center',
+        zIndex: 10,
+    },
+    controlRow: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    backBtn: {
-        width: 44,
-        height: 44,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: 8,
-    },
-    headerRight: {
-        marginLeft: 'auto',
-        marginRight: 14,
-        flexDirection: 'row',
-        alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
         gap: 10,
     },
     headerIconBtn: {
@@ -944,14 +985,17 @@ const styles = StyleSheet.create({
 
     stepCard: {
         marginHorizontal: 18,
-        backgroundColor: BG,
-        borderRadius: 18,
+        backgroundColor: WHITE,
+        borderRadius: 14,
+        borderLeftWidth: 4,
+        borderLeftColor: '#E2E8F0',
         paddingHorizontal: 18,
         paddingVertical: 16,
         minHeight: 169,
+        justifyContent: 'space-between',
     },
     stepCardActive: {
-        backgroundColor: WHITE,
+        borderLeftColor: BRAND,
         shadowColor: '#000',
         shadowOpacity: 0.04,
         shadowRadius: 10,
@@ -1258,5 +1302,32 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: '900',
         fontSize: 16,
+    },
+
+    stepIngRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 'auto',
+        paddingTop: 10,
+    },
+    stepIngTag: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: BG,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 12,
+        gap: 4,
+    },
+    stepIngName: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: MUTED,
+    },
+    stepIngAmount: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: MUTED,
     },
 });
