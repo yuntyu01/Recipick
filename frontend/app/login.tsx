@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import * as SecureStore from "expo-secure-store";
 import { Stack, useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import {
   Alert,
   Dimensions,
@@ -13,74 +13,96 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { signInAnonymously } from "firebase/auth";
+import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import { makeRedirectUri } from "expo-auth-session";
 
 import { auth } from "../lib/firebase";
 
-/* ================== FIGMA SCALE (430 기준) ================== */
+WebBrowser.maybeCompleteAuthSession();
+
+/* ================== FIGMA SCALE ================== */
 const FIGMA_W = 430;
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 const SCALE = SCREEN_W / FIGMA_W;
 const s = (v: number) => Math.round(v * SCALE);
 
-/* ---------- theme ---------- */
 const GREEN = "#48C7A0";
 const GREEN_SOFT = "#CFEFE3";
 const CARD = "#FFFFFF";
 const TEXT_DARK = "#0F172A";
 const TEXT_MUTED = "#64748B";
-const BORDER = "#E7ECEF";
 
 export default function LoginPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-
   const [loading, setLoading] = useState(false);
+  const redirectUri = makeRedirectUri({
+  useProxy: true,
+} as any);
 
-  const goPreviewHomeWithAnonymousFirebase = async () => {
+const [request, response, promptAsync] = Google.useAuthRequest({
+  androidClientId: "549481647484-1nnosudvcos4btr683rh92lf23r8cam2.apps.googleusercontent.com",
+  iosClientId: "549481647484-bmquvsfr9sg4cfrnt0cpvi09ioktgb8u.apps.googleusercontent.com",
+  webClientId: "549481647484-7p2003hd98uqmfmgvsclffao7c8bu685.apps.googleusercontent.com", // ⭐ 이게 핵심
+  redirectUri,
+});
+
+  /* 🔥 앱 로그인 성공 처리 */
+  useEffect(() => {
+    const saveAppData = async () => {
+      if (response?.type === "success") {
+        const { authentication } = response;
+
+        // 💡 [수정 포인트] Platform 체크를 추가해서 웹 에러 방지!
+        if (authentication?.idToken) {
+          if (Platform.OS !== 'web') {
+            // 📱 앱 환경: SecureStore 사용
+            await SecureStore.setItemAsync("accessToken", authentication.idToken);
+          } else {
+            // 🌐 웹 환경: localStorage 사용
+            localStorage.setItem("accessToken", authentication.idToken);
+          }
+        }
+
+        console.log("로그인 성공!", authentication);
+        router.replace("/home");
+      }
+    };
+
+    saveAppData();
+  }, [response]);
+
+  /* 🔥 로그인 버튼 */
+  const handleGoogleLogin = async () => {
     if (loading) return;
+    setLoading(true);
 
     try {
-      setLoading(true);
+      if (Platform.OS === "web") {
+        // 🌐 웹 로그인
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
 
-      // 이미 로그인된 Firebase 유저가 있으면 재사용
-      const existingUser = auth.currentUser;
-      if (existingUser) {
-        const firebaseIdToken = await existingUser.getIdToken(true);
-        await SecureStore.setItemAsync("hasOnboarded", "true");
-        await SecureStore.setItemAsync("devPreviewMode", "true");
-        await SecureStore.setItemAsync("accessToken", firebaseIdToken);
-        await SecureStore.setItemAsync("userId", existingUser.uid);
+        const idToken = await user.getIdToken();
+
+        localStorage.setItem("accessToken", idToken);
+        localStorage.setItem("userId", user.uid);
+        localStorage.setItem("nickname", user.displayName || "사용자");
+        localStorage.setItem("profileImage", user.photoURL || "");
+
+        console.log("웹 로그인 성공!", user.displayName);
         router.replace("/home");
-        return;
+      } else {
+        // 📱 앱 로그인
+        await promptAsync();
       }
-
-      const userCredential = await signInAnonymously(auth);
-      const firebaseUser = userCredential.user;
-      const firebaseIdToken = await firebaseUser.getIdToken(true);
-
-      await SecureStore.setItemAsync("hasOnboarded", "true");
-      await SecureStore.setItemAsync("devPreviewMode", "true");
-      await SecureStore.setItemAsync("accessToken", firebaseIdToken);
-      await SecureStore.setItemAsync("userId", firebaseUser.uid);
-      await SecureStore.setItemAsync("nickname", "미리보기 사용자");
-      await SecureStore.setItemAsync("profileImage", "");
-
-      router.replace("/home");
-    } catch (e: any) {
-      console.error("[ANONYMOUS PREVIEW LOGIN ERROR FULL]", e);
-      Alert.alert(
-        "익명 로그인 실패",
-        JSON.stringify(
-          {
-            code: e?.code,
-            message: e?.message,
-            name: e?.name,
-          },
-          null,
-          2
-        )
-      );
+    } catch (error) {
+      console.error(error);
+      Alert.alert("로그인 실패", "문제가 발생했습니다.");
     } finally {
       setLoading(false);
     }
@@ -95,54 +117,40 @@ export default function LoginPage() {
 
       <View style={styles.topArea}>
         <Text style={styles.logo}>Recipick!</Text>
-        <Text style={styles.subtitle}>링크 하나로 레시피를 바로 만들어요</Text>
+        <Text style={styles.subtitle}>
+          링크 하나로 레시피를 바로 만들어요
+        </Text>
       </View>
 
       <View style={styles.card}>
         <View style={styles.heroIconWrap}>
-          <Ionicons name="flask-outline" size={s(34)} color={GREEN} />
+          <Ionicons name="logo-google" size={s(34)} color={GREEN} />
         </View>
 
-        <Text style={styles.title}>분석 가능한 미리보기 시작</Text>
+        <Text style={styles.title}>구글로 시작하기</Text>
         <Text style={styles.desc}>
-          Expo Go에서는 구글 로그인이 막혀 있어서{"\n"}
-          임시로 Firebase 익명 로그인으로 홈과 레시피 분석을 사용할게요.
+          백엔드 서버와 연동하여{"\n"}
+          나만의 레시피를 안전하게 보관하세요.
         </Text>
 
-        <View style={{ height: s(24) }} />
+        <View style={{ height: s(32) }} />
 
         <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={goPreviewHomeWithAnonymousFirebase}
+          activeOpacity={0.8}
+          onPress={handleGoogleLogin}
           style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
           disabled={loading}
         >
-          <Ionicons
-            name="arrow-forward-circle-outline"
-            size={s(18)}
-            color="#FFFFFF"
-          />
           <Text style={styles.primaryBtnText}>
-            {loading ? "준비 중..." : "분석 가능한 홈으로 가기"}
+            {loading ? "연결 중..." : "구글 계정으로 로그인"}
           </Text>
         </TouchableOpacity>
 
-        <View style={{ height: s(14) }} />
-
-        <View style={styles.noticeBox}>
-          <Text style={styles.noticeText}>
-            • 이건 임시 개발용 로그인 방식이에요.
-          </Text>
-          <Text style={styles.noticeText}>
-            • 구글 로그인 대신 Firebase 익명 로그인을 사용해 분석 기능만 살립니다.
-          </Text>
-          <Text style={styles.noticeText}>
-            • 나중에 안드로이드 스튜디오 / Dev Build로 가면 구글 로그인으로 교체하면 돼요.
-          </Text>
-        </View>
+        <View style={{ height: s(20) }} />
+        <Text style={styles.footerText}>
+          앱/웹 모두 구글 로그인을 지원합니다.
+        </Text>
       </View>
-
-      <View style={{ height: Math.max(s(18), insets.bottom) }} />
     </KeyboardAvoidingView>
   );
 }
@@ -152,20 +160,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: GREEN,
   },
-
   topArea: {
     height: SCREEN_H * 0.2,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: s(24),
   },
-
   logo: {
     fontSize: s(30),
     fontWeight: "900",
     color: TEXT_DARK,
   },
-
   subtitle: {
     marginTop: s(8),
     fontSize: s(13),
@@ -174,7 +179,6 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     textAlign: "center",
   },
-
   card: {
     flex: 1,
     backgroundColor: CARD,
@@ -183,7 +187,6 @@ const styles = StyleSheet.create({
     paddingTop: s(32),
     paddingHorizontal: s(28),
   },
-
   heroIconWrap: {
     width: s(68),
     height: s(68),
@@ -193,7 +196,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignSelf: "center",
   },
-
   title: {
     marginTop: s(18),
     fontSize: s(22),
@@ -201,7 +203,6 @@ const styles = StyleSheet.create({
     color: TEXT_DARK,
     textAlign: "center",
   },
-
   desc: {
     marginTop: s(10),
     fontSize: s(13),
@@ -210,7 +211,6 @@ const styles = StyleSheet.create({
     color: TEXT_MUTED,
     textAlign: "center",
   },
-
   primaryBtn: {
     height: s(52),
     borderRadius: s(26),
@@ -225,27 +225,32 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: s(4) },
     elevation: 3,
   },
-
   primaryBtnText: {
     color: "#FFFFFF",
     fontSize: s(15),
     fontWeight: "900",
   },
-
   noticeBox: {
     borderWidth: 1,
-    borderColor: BORDER,
+    borderColor: "#E7ECEF", // BORDER 변수 대신 직접 넣거나 위에 정의된 값을 쓰세요
     borderRadius: s(16),
     paddingVertical: s(14),
     paddingHorizontal: s(14),
     backgroundColor: "#F8FAFB",
     gap: s(8),
   },
-
   noticeText: {
     fontSize: s(12),
     lineHeight: s(18),
     fontWeight: "700",
     color: TEXT_MUTED,
+  },
+  // 🟢 여기에 footerText가 들어가야 합니다!
+  footerText: {
+    fontSize: s(12),
+    color: TEXT_MUTED,
+    textAlign: "center",
+    marginTop: s(10),
+    fontWeight: "600",
   },
 });
