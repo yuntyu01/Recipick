@@ -20,8 +20,17 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
 import VoiceSearch from '../components/VoiceSearch';
-
+import { useFrameProcessor, VisionCameraProxy, FrameProcessorPlugin, Frame, Camera, useCameraDevice } from 'react-native-vision-camera';
+import { runOnJS } from 'react-native-reanimated';
 import YoutubePlayer from "react-native-youtube-iframe";
+
+const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands',{});
+
+function detectHands(frame: Frame): any {
+    'worklet';
+    if (plugin == null) return null;
+    return plugin.call(frame);
+}
 
 const BRAND = '#54CDA4';
 const BG = '#F3F6F6';
@@ -82,6 +91,9 @@ export default function CookScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
+    const device = useCameraDevice('back');
+
+
 
     const videoId = firstString(params.video_id);
     const url = firstString(params.url) || firstString(params.link);
@@ -133,7 +145,35 @@ export default function CookScreen() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     const playerRef = useRef<any>(null);
+    const detectHands = (frame: Frame) => {
+        'worklet';
+        if (plugin == null) return null;
+        return plugin.call(frame);
+    };
+    const frameProcessor = useFrameProcessor((frame) => {
+        'worklet';
+        // 네이티브에서 만든 'detectHands' 플러그인 호출
+        const hands = detectHands(frame) as any; 
 
+        if (hands && hands.length > 0) {
+            const hand = hands[0];
+            if (hand.gesture === 'PALM') {
+                runOnJS(togglePlay)();
+            }
+            // 👈 왼쪽 스와이프: 이전 단계
+            else if (hand.gesture === 'SWIPE_LEFT') {
+                runOnJS(jumpToStep)(activeIdx - 1);
+            }
+            // 👉 오른쪽 스와이프: 다음 단계
+            else if (hand.gesture === 'SWIPE_RIGHT') {
+                runOnJS(jumpToStep)(activeIdx + 1);
+            }
+            // 👌 OK 사인: 타이머 모달 열기
+            else if (hand.gesture === 'OK') {
+                runOnJS(setTimerOpen)(true);
+            }
+        }
+    }, [activeIdx]);
     useEffect(() => {
         console.log('[COOK PARAMS]', params);
     }, [params]);
@@ -517,14 +557,29 @@ export default function CookScreen() {
                     </View>
                 </View>
 
-                <View style={styles.hintBox}>
-                    <Text style={styles.hintTitle}>손동작으로 조절해봐요!</Text>
-                    <Text style={styles.hintLine}>멈추고 싶을 때 ✋</Text>
-                    <Text style={styles.hintLine}>전으로 돌아가고 싶을 때 🫲 (왼쪽으로 스와이프)</Text>
-                    <Text style={styles.hintLine}>다음으로 넘어가고 싶을 때 🫱 (오른쪽으로 스와이프)</Text>
-                    <Text style={styles.hintLine}>타이머 설정하고 싶을 때 👌</Text>
+                <View style={styles.hintAndCameraRow}>
+                    <View style={styles.hintBox}>
+                        <Text style={styles.hintTitle}>손동작으로 조절해봐요!</Text>
+                        <Text style={styles.hintLine}>멈춤 ✋</Text>
+                        <Text style={styles.hintLine}>이전으로🫲 (왼쪽으로 스와이프)</Text>
+                        <Text style={styles.hintLine}>다음으로 🫱 (오른쪽으로 스와이프)</Text>
+                        <Text style={styles.hintLine}>타이머👌</Text>
+                    </View>
+                    
+                    <View style={styles.cameraPreviewContainer}>
+                        {device != null && (
+                            <Camera
+                                style={styles.miniCamera}
+                                device={device}
+                                isActive={true}
+                                frameProcessor={frameProcessor}
+                                pixelFormat="yuv"
+                                enableZoomGesture={false}
+                            />
+                        )}
+                        <Text style={styles.cameraLabel}>손 인식 중...</Text>
+                    </View>
                 </View>
-
                 <View style={styles.stepsArea} {...panResponder.panHandlers}>
                     {steps.length > 0 ? (
                         steps.map((s, idx) => {
@@ -638,7 +693,6 @@ export default function CookScreen() {
             <Modal visible={voiceOpen} transparent animationType="fade" onRequestClose={closeVoiceModal}>
             <View style={styles.voiceBackdrop}>
                 <Animated.View style={[styles.voiceCard, { opacity: fadeAnim }]}>
-      
                 <Text style={styles.voiceTitle}>말하세요</Text>
                 <Text style={styles.voiceSub}>{voiceStatusText}</Text>
 
@@ -716,6 +770,55 @@ function AnimatedTextInput({
 
 const styles = StyleSheet.create({
     safe: { flex: 1, backgroundColor: BG },
+
+    container: { flex: 1 },
+    recipeHeader: {
+        flexDirection: 'row', // 가로로 배치 (글자 옆에 카메라)
+        justifyContent: 'space-between',
+        padding: 15,
+        alignItems: 'center',
+        elevation: 2,
+    },
+
+    hintAndCameraRow: {
+        flexDirection: 'row',        // 가로 배치
+        alignItems: 'center',        // 세로 중앙 정렬
+        justifyContent: 'space-between', 
+        backgroundColor: WHITE,      // 박스 배경색
+        marginHorizontal: 18,
+        marginTop: 15,
+        padding: 15,
+        borderRadius: 20,
+        elevation: 3,                // 그림자 효과
+    },
+
+    cameraPreviewContainer: {
+        width: 80,  // 가로 크기
+        height: 100, // 세로 크기
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+        borderWidth: 2,
+        borderColor: BRAND,
+    },
+
+    miniCamera: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    cameraLabel: {
+        position: 'absolute',
+        bottom: 5,
+        width: '100%',
+        textAlign: 'center',
+        color: 'white',
+        fontSize: 9,
+        fontWeight: 'bold',
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingVertical: 2,
+    },
 
     header: {
         backgroundColor: BG,
@@ -823,6 +926,8 @@ const styles = StyleSheet.create({
     progressSegActive: { backgroundColor: BRAND },
 
     hintBox: {
+        flex: 1,
+        marginRight: 10,
         backgroundColor: BG,
         paddingHorizontal: 16,
         paddingTop: 10,

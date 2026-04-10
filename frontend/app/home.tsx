@@ -516,24 +516,49 @@ export default function Home() {
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.topSectionFull}>
-        <View style={{ height: insets.top }} />
-        <View style={styles.navRow}>
-          <View style={{ width: s(40) }} />
-          <Text style={styles.logoInline}>Recipick!</Text>
-          <TouchableOpacity
-            onPress={() => router.push('/mypage')}
-            hitSlop={10}
-            style={styles.profileBtnInline}
-          >
-            <Ionicons name="person" size={s(20)} color="#000" />
-          </TouchableOpacity>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* --- 🟢 [새로운] 상단 통합 영역 (시안 반영) --- */}
+        <View style={styles.topSectionFull}>
+          <View style={{ height: insets.top }} />
+          <View style={styles.navRow}>
+            <View style={{ width: s(40) }} /> {/* 로고 중앙 정렬을 위한 왼쪽 빈 공간 */}
+            <Text style={styles.logoInline}>Recipick!</Text>
+            <TouchableOpacity
+              onPress={() => router.push('/mypage')}
+              hitSlop={10}
+              style={styles.profileBtnInline}
+            >
+              <Ionicons name="person" size={s(20)} color="#000" />
+            </TouchableOpacity>
+          </View>
+
+          {/* (C) 질문 텍스트 */}
+          <Text style={styles.questionInline}>어떤 요리 찾고 있어요?</Text>
+
+          {/* (D) 카테고리 가로 스크롤 */}
+          <FlatList
+            horizontal
+            data={CATEGORIES}
+            keyExtractor={(item) => `cat-${item.key}`}
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryListInline}
+            ItemSeparatorComponent={() => <View style={{ width: s(6) }} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.categoryItemInline}
+                onPress={() => router.push(`/category/${encodeURIComponent(String(item.key))}`)}
+              >
+                <Image source={item.icon} style={styles.categoryImgInline} resizeMode="contain" />
+                <Text style={styles.categoryTextInline}>{item.key}</Text>
+              </TouchableOpacity>
+            )}
+          />
         </View>
 
         <Text style={styles.questionInline}>어떤 요리 찾고 있어요?</Text>

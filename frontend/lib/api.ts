@@ -236,8 +236,8 @@ export type FirebaseAuthResponse = {
  * 공통 request 함수
  * ========================= */
 
-type RequestOptions = RequestInit & {
-  token?: string;
+interface RequestOptions extends RequestInit {
+  token?: string | null;
 };
 
 async function getStoredAccessToken(): Promise<string | undefined> {
@@ -264,7 +264,7 @@ async function getStoredAccessToken(): Promise<string | undefined> {
   }
 }
 
-async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
+export async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const { token, headers, ...restOpts } = opts ?? {};
 
@@ -316,8 +316,11 @@ async function request<T>(path: string, opts?: RequestOptions): Promise<T> {
     const msg =
       (json && (json.detail || json.message || json.error)) ||
       `HTTP ${res.status} ${res.statusText}`;
-
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  if (!res.ok) {
+    throw new Error(`HTTP 에러! 상태코드: ${res.status}`);
   }
 
   return json as T;
@@ -627,7 +630,6 @@ export async function getRecommendQuestions() {
 export async function postRecommendRecipes(answers: Record<string, any>) {
   const token = await getStoredAccessToken();
 
-  // 백엔드 엔드포인트가 /recommend 이므로 주소를 맞춥니다.
   return request<any>('/api/ai/recommend', {
     method: 'POST',
     body: JSON.stringify({ answers }),
@@ -639,29 +641,24 @@ export async function postRecommendRecipes(answers: Record<string, any>) {
  * 냉장고 파먹기 전용 API
  * ========================= */
 
+// 1. getFridgeRecipes 수정 (GET 방식으로 변경)
 export async function getFridgeRecipes(ingredients: string[]) {
   const token = await getStoredAccessToken();
+  const ingredientString = ingredients.join(',');
 
-  // 백엔드 명세에 따라 다르겠지만, 보통 이런 식으로 재료를 보냅니다.
-  return request<any>('/api/ai/fridge-recommend', {
-    method: 'POST',
-    body: JSON.stringify({ ingredients }),
+  return request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+    method: 'GET',
     token,
   });
 }
 
-// 냉장고 파먹기 재료를 기반으로 레시피 검색 요청
+// 2. postFridgeRecommend 수정 (팀장님 피드백 반영 및 GET 변경)
+// 팀장님이 'search' API를 쓰라고 하셨으니, 이 함수도 같은 주소를 바라보게 합니다.
 export async function postFridgeRecommend(ingredients: string[]) {
   const token = await getStoredAccessToken();
+  const ingredientString = ingredients.join(',');
 
-  // 친구분이 만든 recommend API 형식을 빌려 쓰되, 질문 ID를 'ingredients'로 가정해서 보냅니다.
-  // (※ 백엔드 설계에 따라 'ingredients' 대신 다른 키값을 써야 할 수도 있습니다.)
-  return request<any>('/api/ai/recommend', {
-    method: 'POST',
-    body: JSON.stringify({
-      answers: {
-        "ingredients": ingredients // 입력받은 재료 배열
-      }
-    }),
+  return request<any>(`/api/recipes/search?ingredients=${encodeURIComponent(ingredientString)}`, {
+    method: 'GET',
     token,
   });
