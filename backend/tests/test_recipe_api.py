@@ -11,6 +11,49 @@ def _override_auth():
     }
 
 
+# 제목 검색 성공 케이스
+def test_search_by_title_success(client, monkeypatch):
+    monkeypatch.setattr(
+        recipe_router.recipe_service,
+        "search_recipes_by_title",
+        lambda keyword, limit=20: [
+            {
+                "video_id": "abc123",
+                "title": "맛있는 김치찌개 만들기",
+                "thumbnail_url": "https://img.youtube.com/vi/abc123/hqdefault.jpg",
+            },
+            {
+                "video_id": "def456",
+                "title": "김치볶음밥 레시피",
+                "thumbnail_url": "https://img.youtube.com/vi/def456/hqdefault.jpg",
+            },
+        ],
+    )
+    res = client.get("/api/recipes/search/title?keyword=김치")
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body) == 2
+    assert all("김치" in item["title"] for item in body)
+
+
+# 제목 검색 결과 없음 케이스
+def test_search_by_title_empty(client, monkeypatch):
+    monkeypatch.setattr(
+        recipe_router.recipe_service,
+        "search_recipes_by_title",
+        lambda keyword, limit=20: [],
+    )
+    res = client.get("/api/recipes/search/title?keyword=없는레시피")
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+# 제목 검색 keyword 누락 시 422 반환
+def test_search_by_title_missing_keyword(client):
+    res = client.get("/api/recipes/search/title")
+    assert res.status_code == 422
+
+
 # 레시피 요청 기본 성공 케이스
 def test_request_recipe(client, monkeypatch):
     monkeypatch.setattr(

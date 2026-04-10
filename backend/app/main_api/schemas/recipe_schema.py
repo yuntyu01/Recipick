@@ -109,6 +109,13 @@ class RecipeLatestResponse(BaseModel):
     sharer_nickname: Optional[str] = ""
 
 
+# 제목 검색 결과 단건 응답
+class RecipeTitleSearchResponse(BaseModel):
+    video_id: str
+    title: str
+    thumbnail_url: str
+
+
 # 재료 검색 결과의 연관 재료 집계 단건 (이름 + 등장 횟수)
 class IngredientCountResponse(BaseModel):
     name: str

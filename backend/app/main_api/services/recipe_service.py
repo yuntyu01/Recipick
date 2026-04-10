@@ -294,6 +294,11 @@ def get_recommended_videos_by_category(category: str, limit: int = 20):
     return replace_decimals(items)
 
 
+# 제목 검색
+def search_recipes_by_title(keyword: str, limit: int = 20) -> list:
+    return replace_decimals(recipe_repo.search_recipes_by_title(keyword, limit=limit))
+
+
 # 다중 재료 교집합 레시피 검색 + 연관 재료 집계
 def search_recipes_by_ingredients(names: list[str]) -> dict:
     # 각 재료의 video_id 목록을 개별 GetItem으로 조회

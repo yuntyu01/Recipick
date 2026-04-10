@@ -13,6 +13,7 @@ from app.main_api.schemas.recipe_schema import (
     RecipeSearchResultResponse,
     RecipeSearchResponse,
     RecipeLatestResponse,
+    RecipeTitleSearchResponse,
 )
 from app.main_api.dependencies.auth import get_current_auth_user, get_optional_auth_user
 from app.main_api.services import recipe_service
@@ -45,6 +46,13 @@ def get_latest_recipes(limit: int = Query(default=20, ge=1, le=100)):
 def get_recommendations_by_category(category: str, limit: int = Query(default=20, ge=1, le=100)):
     # 카테고리별 추천 레시피 목록 조회 (홈 화면/카테고리 탭)
     return recipe_service.get_recommended_videos_by_category(category=category, limit=limit)
+
+
+@router.get("/search/title", response_model=list[RecipeTitleSearchResponse])
+def search_recipes_by_title(
+    keyword: str = Query(..., description="검색할 제목 키워드 (예: 김치)")
+):
+    return recipe_service.search_recipes_by_title(keyword)
 
 
 @router.get("/search", response_model=RecipeSearchResponse)

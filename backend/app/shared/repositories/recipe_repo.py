@@ -1,6 +1,6 @@
 import boto3
 from datetime import datetime, timezone
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from app.shared.config import settings
 from botocore.exceptions import ClientError
 from typing import Optional, List
@@ -526,6 +526,39 @@ def get_latest_recipes(limit: int = 20) -> list:
         })
         if len(results) >= limit:
             break
+    return results
+
+
+# ─────────────────────────────────────────────────────────────
+# 제목 검색 (Scan + contains 필터, ProjectionExpression으로 경량화)
+# ─────────────────────────────────────────────────────────────
+
+def search_recipes_by_title(keyword: str, limit: int = 20) -> list:
+    """COMPLETED 레시피 중 제목에 keyword가 포함된 레시피의 video_id, title만 반환."""
+    results = []
+    scan_kwargs = {
+        "FilterExpression": Attr("title").contains(keyword)
+            & Attr("status").eq("COMPLETED")
+            & Attr("PK").begins_with("VIDEO#")
+            & Attr("SK").eq("INFO"),
+        "ProjectionExpression": "PK, title, thumbnail_url",
+    }
+
+    while True:
+        response = recipe_table.scan(**scan_kwargs)
+        for item in response.get("Items", []):
+            video_id = str(item["PK"]).replace("VIDEO#", "")
+            results.append({
+                "video_id": video_id,
+                "title": item.get("title") or "",
+                "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+            })
+            if len(results) >= limit:
+                return results
+        if "LastEvaluatedKey" not in response:
+            break
+        scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+
     return results
 
 

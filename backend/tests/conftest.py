@@ -29,6 +29,9 @@ def _install_test_stubs():
             def query(self, *args, **kwargs):
                 return {"Items": []}
 
+            def scan(self, *args, **kwargs):
+                return {"Items": []}
+
             def delete_item(self, *args, **kwargs):
                 return {}
 
