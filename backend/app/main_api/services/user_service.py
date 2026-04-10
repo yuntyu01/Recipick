@@ -92,6 +92,14 @@ def create_user_history(
     return _replace_decimals(item)
 
 
+# 유저 히스토리 메모 조회
+def get_history_memo(user_id: str, video_id: str):
+    item = user_repo.get_history_memo(user_id, video_id)
+    if not item:
+        return None
+    return _replace_decimals(item)
+
+
 # 유저 히스토리 메모 저장/수정
 def update_history_memo(user_id: str, video_id: str, memo: str):
     item = user_repo.update_history_memo(user_id, video_id, memo)

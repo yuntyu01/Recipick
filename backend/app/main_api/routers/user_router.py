@@ -80,6 +80,15 @@ def get_user_history(user_id: str, limit: int = Query(default=20, ge=1, le=100))
     return user_service.get_user_history(user_id=user_id, limit=limit)
 
 
+@router.get("/{user_id}/history/{video_id}/memo", response_model=UserHistoryMemoResponse)
+def get_history_memo(user_id: str, video_id: str):
+    # 유저 히스토리 메모 조회
+    result = user_service.get_history_memo(user_id=user_id, video_id=video_id)
+    if not result:
+        return {"video_id": video_id, "memo": ""}
+    return result
+
+
 @router.put("/{user_id}/history/{video_id}/memo", response_model=UserHistoryMemoResponse)
 def update_history_memo(user_id: str, video_id: str, req: UserHistoryMemoRequest):
     # 유저 히스토리 메모 저장/수정

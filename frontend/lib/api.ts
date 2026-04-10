@@ -627,6 +627,21 @@ export type UserHistoryMemoResponse = {
   memo: string;
 };
 
+export async function getHistoryMemo(
+  userId: string,
+  videoId: string
+): Promise<UserHistoryMemoResponse> {
+  const token = await getStoredAccessToken();
+
+  return request<UserHistoryMemoResponse>(
+    `/api/users/${encodeURIComponent(userId)}/history/${encodeURIComponent(videoId)}/memo`,
+    {
+      method: 'GET',
+      token,
+    }
+  );
+}
+
 export async function updateHistoryMemo(
   userId: string,
   videoId: string,

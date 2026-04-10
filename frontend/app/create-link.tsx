@@ -562,11 +562,10 @@ export default function CreateLink() {
           ) : (
             <View style={{ paddingHorizontal: PAD_LR }}>
               <View style={styles.memoCard}>
-                {memoSaved && (
-                  <View style={styles.memoHeader}>
-                    <Text style={styles.memoSavedText}>저장됨</Text>
-                  </View>
-                )}
+                <View style={styles.memoHeader}>
+                  <Text style={styles.memoTitle}>메모</Text>
+                  {memoSaved && <Text style={styles.memoSavedText}>저장됨</Text>}
+                </View>
                 <TextInput
                   style={styles.memoInput}
                   value={memo}
@@ -1144,8 +1143,14 @@ const styles = StyleSheet.create({
   },
   memoHeader: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginBottom: 6,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  memoTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: TEXT,
   },
   memoSavedText: {
     fontSize: 11,
