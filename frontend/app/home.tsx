@@ -644,9 +644,10 @@ export default function Home() {
                   ) : (
                     // 초기 상태일 때는 이 안내 문구가 렌더링됨
                     <View style={styles.createNoticeNewInline}>
-                      <Text style={styles.createBulletNewInline}>• 지원 가능: 유튜브</Text>
-                      <Text style={styles.createBulletNewInline}>• 30분 이상 영상은 분석이 불가능해요</Text>
+                      <Text style={styles.createBulletNewInline}>지원 가능: 유튜브</Text>
+                      <Text style={styles.createBulletNewInline}>• 영상의 메인 메뉴 하나만 분석해요</Text>
                       <Text style={styles.createBulletNewInline}>• 분석에는 약 30초의 시간이 걸립니다</Text>
+                      <Text style={styles.createBulletNewInline}>• 너무 긴 영상일 경우 분석이 안 될 수 있어요</Text>
                     </View>
                   )}
                 </View>
