@@ -5,6 +5,8 @@ from app.main_api.schemas.user_schema import (
     UserHistoryCreateRequest,
     UserHistoryResponse,
     UserActivityResponse,
+    UserHistoryMemoRequest,
+    UserHistoryMemoResponse,
     ProfileImagePresignRequest,
     ProfileImagePresignResponse,
     ProfileImageConfirmRequest,
@@ -76,6 +78,19 @@ def create_user_history(user_id: str, req: UserHistoryCreateRequest):
 def get_user_history(user_id: str, limit: int = Query(default=20, ge=1, le=100)):
     # 유저 레시피 사용 이력 최신순 조회
     return user_service.get_user_history(user_id=user_id, limit=limit)
+
+
+@router.put("/{user_id}/history/{video_id}/memo", response_model=UserHistoryMemoResponse)
+def update_history_memo(user_id: str, video_id: str, req: UserHistoryMemoRequest):
+    # 유저 히스토리 메모 저장/수정
+    result = user_service.update_history_memo(
+        user_id=user_id,
+        video_id=video_id,
+        memo=req.memo,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="해당 레시피 히스토리를 찾을 수 없습니다.")
+    return {"video_id": video_id, "memo": req.memo}
 
 
 @router.get("/{user_id}/activities", response_model=list[UserActivityResponse])

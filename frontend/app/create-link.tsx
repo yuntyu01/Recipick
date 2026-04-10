@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -7,9 +7,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { updateHistoryMemo } from '../lib/api';
+import { auth } from '../lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +25,7 @@ const BORDER = '#D9D9D9';
 const TEXT = '#3B4F4E';
 const MUTED = '#8A9B9A';
 
-type TabKey = 'recipe' | 'ingredient';
+type TabKey = 'recipe' | 'ingredient' | 'nutrition';
 
 type Step = {
   id: string;
@@ -30,6 +33,12 @@ type Step = {
   body: string;
   timerSec?: string;
   videoTimestamp?: string;
+};
+
+type NutritionItem = {
+  label: string;
+  value: string;
+  unit: string;
 };
 
 type SubItem = {
@@ -92,6 +101,13 @@ function safeText(value: any, fallback = '') {
   if (value === undefined || value === null) return fallback;
   const str = String(value).trim();
   return str || fallback;
+}
+
+function parseWonToNumber(value: any): number {
+  if (value === undefined || value === null || value === '') return 0;
+  const raw = String(value).replace(/[^\d.-]/g, '');
+  const num = Number(raw);
+  return Number.isNaN(num) ? 0 : num;
 }
 
 export default function CreateLink() {
@@ -187,6 +203,59 @@ export default function CreateLink() {
     }));
   }, [recipeData]);
 
+  const nutrition: NutritionItem[] = useMemo(() => {
+    const items: NutritionItem[] = [];
+
+    // total_calorie (최상위 필드)
+    if (recipeData?.total_calorie) {
+      const raw = String(recipeData.total_calorie).replace(/[^\d.]/g, '');
+      if (raw) items.push({ label: '칼로리', value: raw, unit: 'kcal' });
+    }
+
+    // nutrition_details 내 필드를 라벨 매핑으로 동적 처리
+    const labelMap: Record<string, { label: string; unit: string }> = {
+      carbs_g: { label: '탄수화물', unit: 'g' },
+      protein_g: { label: '단백질', unit: 'g' },
+      fat_g: { label: '지방', unit: 'g' },
+      sodium_mg: { label: '나트륨', unit: 'mg' },
+      sugar_g: { label: '당류', unit: 'g' },
+    };
+
+    const nd = recipeData?.nutrition_details;
+    if (nd && typeof nd === 'object') {
+      // labelMap에 있는 키는 정해진 순서대로, 나머지는 뒤에 동적 추가
+      const knownKeys = Object.keys(labelMap);
+      const allKeys = Object.keys(nd);
+
+      // 알려진 키 먼저
+      for (const key of knownKeys) {
+        const val = nd[key];
+        if (val === undefined || val === null || String(val).trim() === '') continue;
+        const raw = String(val).replace(/[^\d.]/g, '');
+        if (!raw || raw === '0') continue;
+        const info = labelMap[key];
+        items.push({ label: info.label, value: raw, unit: info.unit });
+      }
+
+      // API에서 새로운 필드가 추가되면 자동으로 표시
+      for (const key of allKeys) {
+        if (knownKeys.includes(key)) continue;
+        const val = nd[key];
+        if (val === undefined || val === null || String(val).trim() === '') continue;
+        const raw = String(val).replace(/[^\d.]/g, '');
+        if (!raw || raw === '0') continue;
+
+        // 키 이름에서 라벨과 단위 추출 (예: fiber_g -> fiber, g)
+        const match = key.match(/^(.+?)_([a-zA-Z]+)$/);
+        const label = match ? match[1].replace(/_/g, ' ') : key;
+        const unit = match ? match[2] : '';
+        items.push({ label, value: raw, unit });
+      }
+    }
+
+    return items;
+  }, [recipeData]);
+
   const handleSelectIng = (ingId: string, itemId: string) => {
     setSelectedIngItem((prev) => {
       if (prev[ingId] === itemId) {
@@ -236,6 +305,53 @@ export default function CreateLink() {
     });
     return map;
   }, [steps, ingredients]);
+
+  const totalPrice = useMemo(() => {
+    if (recipeData?.total_estimated_price) {
+      return parseWonToNumber(recipeData.total_estimated_price);
+    }
+    return ingredients.reduce((sum, ing) => sum + parseWonToNumber(ing.price), 0);
+  }, [recipeData, ingredients]);
+
+  const remainingPrice = useMemo(() => {
+    let selected = 0;
+    for (const ing of ingredients) {
+      const chosenId = selectedIngItem[ing.id];
+      if (!chosenId) continue;
+      if (chosenId === ing.id) {
+        selected += parseWonToNumber(ing.price);
+      } else {
+        const sub = ing.subs?.find(s => s.id === chosenId);
+        if (sub) selected += parseWonToNumber(sub.price);
+      }
+    }
+    return Math.max(totalPrice - selected, 0);
+  }, [totalPrice, ingredients, selectedIngItem]);
+
+  // 메모
+  const [memo, setMemo] = useState('');
+  const [memoSaved, setMemoSaved] = useState(false);
+  const memoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (recipeData?.memo) setMemo(recipeData.memo);
+  }, [recipeData]);
+
+  const handleMemoChange = useCallback((text: string) => {
+    setMemo(text);
+    setMemoSaved(false);
+    if (memoTimer.current) clearTimeout(memoTimer.current);
+    memoTimer.current = setTimeout(async () => {
+      const uid = auth.currentUser?.uid;
+      if (!uid || !videoId) return;
+      try {
+        await updateHistoryMemo(uid, videoId, text);
+        setMemoSaved(true);
+      } catch (e) {
+        console.log('[MEMO] save error', e);
+      }
+    }, 1000);
+  }, [videoId]);
 
   const contentBottomPad = CTA_BTN_H + CTA_GAP + Math.max(insets.bottom, 10) + 18;
   const FIXED_TOP_H = VIDEO_H;
@@ -291,6 +407,11 @@ export default function CreateLink() {
             <Text style={[styles.tabText, tab === 'ingredient' && styles.tabTextActive]}>재료</Text>
             <View style={[styles.tabLine, tab === 'ingredient' && styles.tabLineActive]} />
           </TouchableOpacity>
+
+          <TouchableOpacity activeOpacity={0.9} onPress={() => setTab('nutrition')} style={styles.tabBtn}>
+            <Text style={[styles.tabText, tab === 'nutrition' && styles.tabTextActive]}>부가사항</Text>
+            <View style={[styles.tabLine, tab === 'nutrition' && styles.tabLineActive]} />
+          </TouchableOpacity>
         </View>
         <View style={styles.contentWrap}>
           {tab === 'recipe' ? (
@@ -343,7 +464,7 @@ export default function CreateLink() {
                 </View>
               )}
             </View>
-          ) : (
+          ) : tab === 'ingredient' ? (
             <View>
               <Text style={styles.ingHint}>준비된 재료는 터치해 주세요!</Text>
 
@@ -426,6 +547,78 @@ export default function CreateLink() {
                   </View>
                 )}
               </View>
+
+              {totalPrice > 0 && (
+                <View style={styles.bottomPriceRow}>
+                  <Text style={styles.totalPriceText}>
+                    총 <Text style={styles.totalPriceValue}>{totalPrice.toLocaleString('ko-KR')}원</Text>
+                  </Text>
+                  <Text style={styles.remainingText}>
+                    아직 필요한 금액  <Text style={styles.remainingValue}>{remainingPrice.toLocaleString('ko-KR')}원</Text>
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: PAD_LR }}>
+              <View style={styles.memoCard}>
+                {memoSaved && (
+                  <View style={styles.memoHeader}>
+                    <Text style={styles.memoSavedText}>저장됨</Text>
+                  </View>
+                )}
+                <TextInput
+                  style={styles.memoInput}
+                  value={memo}
+                  onChangeText={handleMemoChange}
+                  placeholder="나만의 메모를 남겨보세요"
+                  placeholderTextColor={MUTED}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {nutrition.length > 0 ? (
+                <View style={styles.nutCard}>
+                  <View style={styles.nutTitleRow}>
+                    <Text style={styles.nutTitleText}>영양성분</Text>
+                  </View>
+
+                  {nutrition.map((item, idx) => {
+                    const isCalorie = item.label === '칼로리';
+                    return (
+                      <View
+                        key={item.label}
+                        style={[
+                          styles.nutRow,
+                          idx > 0 && styles.nutRowBorder,
+                          isCalorie && styles.nutRowCalorie,
+                        ]}
+                      >
+                        <Text style={[styles.nutLabel, isCalorie && styles.nutLabelCalorie]}>
+                          {item.label}
+                        </Text>
+                        <View style={styles.nutValueWrap}>
+                          <Text style={[styles.nutValue, isCalorie && styles.nutValueCalorie]}>
+                            {item.value}
+                          </Text>
+                          <Text style={[styles.nutUnit, isCalorie && styles.nutUnitCalorie]}>
+                            {item.unit}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  <Text style={styles.nutDisclaimer}>
+                    * AI 추정치이며 실제 영양성분과 다를 수 있습니다.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.emptyBox}>
+                  <Text style={styles.emptyText}>영양성분 정보가 아직 없어요.</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -563,7 +756,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   tabBtn: {
-    width: SCREEN_W / 2,
+    width: SCREEN_W / 3,
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingTop: 6,
@@ -702,6 +895,33 @@ const styles = StyleSheet.create({
     color: BRAND,
   },
 
+  bottomPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  totalPriceText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  totalPriceValue: {
+    fontWeight: '900',
+    color: TEXT,
+  },
+  remainingText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: MUTED,
+  },
+  remainingValue: {
+    fontWeight: '900',
+    color: TEXT,
+  },
+
   ingHint: {
     marginTop: 4,
     marginLeft: 30,
@@ -837,6 +1057,111 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     color: TEXT,
+  },
+
+  nutCard: {
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  nutTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+  nutTitleText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: TEXT,
+  },
+  nutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 11,
+  },
+  nutRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: '#E8EDED',
+  },
+  nutRowCalorie: {
+    paddingVertical: 14,
+    backgroundColor: '#F0FAF6',
+    marginHorizontal: -18,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+  },
+  nutLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: TEXT,
+  },
+  nutLabelCalorie: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: BRAND,
+  },
+  nutValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  nutValue: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: TEXT,
+  },
+  nutValueCalorie: {
+    fontSize: 20,
+    color: BRAND,
+  },
+  nutUnit: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: MUTED,
+  },
+  nutUnitCalorie: {
+    fontSize: 13,
+    color: BRAND,
+  },
+  nutDisclaimer: {
+    marginTop: 14,
+    fontSize: 11,
+    fontWeight: '600',
+    color: MUTED,
+    textAlign: 'center',
+  },
+
+  memoCard: {
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    marginTop: 8,
+  },
+  memoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 6,
+  },
+  memoSavedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: BRAND,
+  },
+  memoInput: {
+    backgroundColor: BG,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT,
+    minHeight: 100,
+    lineHeight: 20,
   },
 
   emptyBox: {

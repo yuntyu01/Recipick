@@ -615,6 +615,36 @@ export async function askAi(body: AiAskRequest): Promise<AiAskResponse> {
 }
 
 /* =========================
+ * 히스토리 메모 API
+ * ========================= */
+
+export type UserHistoryMemoRequest = {
+  memo: string;
+};
+
+export type UserHistoryMemoResponse = {
+  video_id: string;
+  memo: string;
+};
+
+export async function updateHistoryMemo(
+  userId: string,
+  videoId: string,
+  memo: string
+): Promise<UserHistoryMemoResponse> {
+  const token = await getStoredAccessToken();
+
+  return request<UserHistoryMemoResponse>(
+    `/api/users/${encodeURIComponent(userId)}/history/${encodeURIComponent(videoId)}/memo`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ memo }),
+      token,
+    }
+  );
+}
+
+/* =========================
  * 메뉴 추천(Flow) API
  * ========================= */
 

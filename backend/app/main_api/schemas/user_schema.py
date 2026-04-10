@@ -64,6 +64,18 @@ class UserHistoryResponse(BaseModel):
     comment_count: Optional[int] = None
     share_count: Optional[int] = None
     status: Optional[RecipeStatus] = None
+    memo: Optional[str] = None
+
+
+# 메모 저장/수정 요청 바디
+class UserHistoryMemoRequest(BaseModel):
+    memo: str
+
+
+# 메모 저장/수정 응답
+class UserHistoryMemoResponse(BaseModel):
+    video_id: str
+    memo: str
 
 
 # 유저 활동 로그 단건 응답 (댓글/좋아요/북마크/공유 등)

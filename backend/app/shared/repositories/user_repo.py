@@ -95,6 +95,28 @@ def list_user_history(user_id: str, limit: int = 20):
     return response.get("Items", [])
 
 
+# 유저 히스토리 메모 업데이트
+def update_history_memo(user_id: str, video_id: str, memo: str):
+    # video_id로 해당 히스토리 아이템의 SK를 찾은 뒤 memo 업데이트
+    response = recipe_table.query(
+        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
+        FilterExpression=Attr("video_id").eq(video_id),
+        Limit=1,
+    )
+    items = response.get("Items", [])
+    if not items:
+        return None
+
+    item = items[0]
+    recipe_table.update_item(
+        Key={"PK": item["PK"], "SK": item["SK"]},
+        UpdateExpression="SET memo = :memo",
+        ExpressionAttributeValues={":memo": memo},
+    )
+    item["memo"] = memo
+    return item
+
+
 # 유저 활동 로그 최신순 조회
 def list_user_activities(user_id: str, limit: int = 20):
     response = recipe_table.query(
