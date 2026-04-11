@@ -49,7 +49,6 @@ def add_user_history(
     existing = recipe_table.query(
         KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
         FilterExpression=Attr("video_id").eq(video_id),
-        Limit=1,
     )
     if existing.get("Items"):
         return existing["Items"][0]
@@ -100,7 +99,6 @@ def get_history_memo(user_id: str, video_id: str):
     response = recipe_table.query(
         KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
         FilterExpression=Attr("video_id").eq(video_id),
-        Limit=1,
     )
     items = response.get("Items", [])
     if not items:
@@ -115,7 +113,6 @@ def update_history_memo(user_id: str, video_id: str, memo: str):
     response = recipe_table.query(
         KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
         FilterExpression=Attr("video_id").eq(video_id),
-        Limit=1,
     )
     items = response.get("Items", [])
     if not items:
