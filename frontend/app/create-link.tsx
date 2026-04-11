@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { updateHistoryMemo } from '../lib/api';
+import { buildUserHistoryPayloadFromRecipe, createUserHistory, getMeWithToken, getUserIdFromMe, updateHistoryMemo, type RecipeData } from '../lib/api';
 import { auth } from '../lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -331,27 +331,55 @@ export default function CreateLink() {
   // 메모
   const [memo, setMemo] = useState('');
   const [memoSaved, setMemoSaved] = useState(false);
+  const [memoError, setMemoError] = useState<string | null>(null);
   const memoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resolvedUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (recipeData?.memo) setMemo(recipeData.memo);
   }, [recipeData]);
 
+  const resolveUserId = async () => {
+    if (resolvedUserId.current) return resolvedUserId.current;
+    const user = auth.currentUser;
+    if (!user) return null;
+    const token = await user.getIdToken();
+    const me = await getMeWithToken(token);
+    const uid = getUserIdFromMe(me);
+    resolvedUserId.current = uid;
+    return uid;
+  };
+
   const handleMemoChange = useCallback((text: string) => {
     setMemo(text);
     setMemoSaved(false);
+    setMemoError(null);
     if (memoTimer.current) clearTimeout(memoTimer.current);
     memoTimer.current = setTimeout(async () => {
-      const uid = auth.currentUser?.uid;
-      if (!uid || !videoId) return;
+      if (!videoId) return;
       try {
-        await updateHistoryMemo(uid, videoId, text);
+        const uid = await resolveUserId();
+        if (!uid) return;
+
+        try {
+          await updateHistoryMemo(uid, videoId, text);
+        } catch (memoErr: any) {
+          // 히스토리가 없으면 생성 후 재시도
+          if (memoErr?.message?.includes('찾을 수 없습니다') && recipeData) {
+            const payload = buildUserHistoryPayloadFromRecipe({ ...recipeData, video_id: videoId } as RecipeData);
+            await createUserHistory(uid, payload);
+            await updateHistoryMemo(uid, videoId, text);
+          } else {
+            throw memoErr;
+          }
+        }
         setMemoSaved(true);
-      } catch (e) {
-        console.log('[MEMO] save error', e);
+      } catch (e: any) {
+        console.log('[MEMO] save error', e?.message || e);
+        setMemoError('저장 실패');
       }
     }, 1000);
-  }, [videoId]);
+  }, [videoId, recipeData]);
 
   const contentBottomPad = CTA_BTN_H + CTA_GAP + Math.max(insets.bottom, 10) + 18;
   const FIXED_TOP_H = VIDEO_H;
@@ -565,6 +593,7 @@ export default function CreateLink() {
                 <View style={styles.memoHeader}>
                   <Text style={styles.memoTitle}>메모</Text>
                   {memoSaved && <Text style={styles.memoSavedText}>저장됨</Text>}
+                  {!!memoError && <Text style={[styles.memoSavedText, { color: '#D14B4B' }]}>{memoError}</Text>}
                 </View>
                 <TextInput
                   style={styles.memoInput}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getLatestRecipes, LatestRecipe } from '../lib/api';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -15,13 +15,20 @@ import {
   getUserIdFromMe,
   normalizeRecommendations,
   normalizeUserHistory,
-  waitRecipeCompleted,
   type RecommendationItem,
   type RecipeCategory,
   type RecipeData,
   type UserHistoryItem,
   type UserHistoryRecipeData,
 } from '../lib/api';
+import {
+  addPendingRecipe,
+  getPendingRecipes,
+  removePending,
+  subscribePending,
+  updatePendingStatus,
+  type PendingRecipe,
+} from '../lib/pending-recipes';
 import { buildYoutubeMetaFromUrl, extractYouTubeVideoId } from '../lib/youtube';
 import {
   Dimensions,
@@ -194,6 +201,10 @@ export default function Home() {
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
 
   const oembedTimer = useRef<any>(null);
+
+  // 분석 대기 중인 레시피
+  const [pendingRecipes, setPendingRecipes] = useState<PendingRecipe[]>(getPendingRecipes());
+  const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const getAccessToken = async () => {
     let token = null;
@@ -415,6 +426,69 @@ export default function Home() {
     };
   }, []);
 
+  // pending store 구독 + 폴링 (3분 타임아웃)
+  const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+
+  const pollPendingItem = useCallback(async (p: PendingRecipe) => {
+    if (p.status !== 'ANALYZING') return;
+
+    // 타임아웃 체크
+    if (Date.now() - p.addedAt > POLL_TIMEOUT_MS) {
+      console.log('[POLL TIMEOUT]', p.videoId);
+      updatePendingStatus(p.videoId, 'FAILED');
+      return;
+    }
+
+    try {
+      const result = await getRecipe(p.videoId);
+      if (result.status === 'COMPLETED' && result.data) {
+        updatePendingStatus(p.videoId, 'COMPLETED');
+        // DB에 저장
+        try {
+          const uid = userId || (await getCurrentUserId());
+          if (uid) {
+            const dataWithVideoId = { ...result.data, video_id: result.video_id ?? p.videoId };
+            await createUserHistorySafe(uid, dataWithVideoId);
+            await loadHomeFeed(uid);
+          }
+        } catch (e) {
+          console.log('[SAVE COMPLETED RECIPE ERROR]', e);
+        }
+        removePending(p.videoId);
+        return;
+      }
+      if (result.status === 'FAILED') {
+        updatePendingStatus(p.videoId, 'FAILED');
+        return;
+      }
+      // 아직 PROCESSING → 계속 폴링
+      pollTimers.current[p.videoId] = setTimeout(() => pollPendingItem(p), 2000);
+    } catch (e) {
+      console.log('[POLL ERROR]', p.videoId, e);
+      pollTimers.current[p.videoId] = setTimeout(() => pollPendingItem(p), 3000);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    const unsub = subscribePending(() => {
+      setPendingRecipes(getPendingRecipes());
+    });
+
+    // 분석 중인 아이템 폴링 시작
+    const current = getPendingRecipes();
+    current.forEach((p) => {
+      if (p.status === 'ANALYZING' && !pollTimers.current[p.videoId]) {
+        pollPendingItem(p);
+      }
+    });
+
+    return () => {
+      unsub();
+      Object.values(pollTimers.current).forEach(clearTimeout);
+      pollTimers.current = {};
+    };
+  }, [pollPendingItem]);
+
   const handleDone = async () => {
     const trimmed = link.trim();
     if (!trimmed) {
@@ -424,84 +498,40 @@ export default function Home() {
     setAnalyzeError(null);
 
     try {
-      setAnalyzeLoading(true);
       const videoId = extractYouTubeVideoId(trimmed);
       if (!videoId) {
         setAnalyzeError('유효한 유튜브 링크가 아니야.');
         return;
       }
 
-      let resolvedUserId = userId;
-      if (!resolvedUserId) {
-        try {
-          resolvedUserId = await getCurrentUserId();
-          setUserId(resolvedUserId);
-        } catch (e) {
-          resolvedUserId = null;
-        }
-      }
-
       const safeTitle = videoMeta?.title?.trim() || '제목 없음';
       const safeChannelName = videoMeta?.channelName?.trim() || '채널명 없음';
+      const thumbnailUrl = videoMeta?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
-      const requestBody = {
+      // 분석 요청만 보내고 (fire-and-forget)
+      analyzeRecipe({
         video_id: videoId,
         original_url: `https://www.youtube.com/watch?v=${videoId}`,
         sharer_nickname: '익명',
         title: safeTitle,
         channel_name: safeChannelName,
-      };
+      }).catch((e) => console.log('[ANALYZE REQUEST ERROR]', e));
 
-      const first = await analyzeRecipe(requestBody);
-      const finalRes =
-        first.status === 'PROCESSING'
-          ? await waitRecipeCompleted(first.video_id, {
-            intervalMs: 1500,
-            timeoutMs: 180000,
-          })
-          : first;
-
-      if (finalRes.status === 'FAILED') {
-        setAnalyzeError('분석에 실패했어. 다른 링크로 다시 시도해줘.');
-        return;
-      }
-      if (finalRes.status !== 'COMPLETED' || !finalRes.data) {
-        setAnalyzeError('분석 결과가 아직 준비되지 않았어.');
-        return;
-      }
-
-      try {
-        let currentId = resolvedUserId || userId;
-        if (!currentId) {
-          currentId = await getCurrentUserId();
-          setUserId(currentId);
-        }
-        if (currentId) {
-          const dataWithVideoId = { ...finalRes.data, video_id: finalRes.video_id ?? videoId };
-          await createUserHistorySafe(currentId, dataWithVideoId);
-          await loadHomeFeed(currentId);
-        }
-      } catch (historyError) {
-        console.log('[CREATE USER HISTORY ERROR]', historyError);
-      }
-
-      openCreateLinkScreen({
+      // 대기 목록에 추가
+      addPendingRecipe({
+        videoId,
+        title: safeTitle,
+        channelName: safeChannelName,
+        thumbnailUrl,
         url: trimmed,
-        videoId: finalRes.video_id ?? videoId,
-        title: finalRes.title || safeTitle,
-        channelName: finalRes.channel_name || safeChannelName,
-        thumbnailUrl: finalRes.thumbnail_url || videoMeta?.thumbnailUrl || '',
-        recipeData: finalRes.data,
       });
 
+      // 패널 닫고 홈 화면에 머무름 (나의 레시피 섹션에서 분석중 표시)
       setShowCreatePanel(false);
       setLink('');
       setVideoMeta(null);
-      await loadHomeFeed(resolvedUserId!);
     } catch (e: any) {
       setAnalyzeError(e?.message || '분석 요청 중 오류가 났어.');
-    } finally {
-      setAnalyzeLoading(false);
     }
   };
 
@@ -678,14 +708,20 @@ export default function Home() {
           </View>
           <FlatList
             horizontal
-            data={myRecipes}
-            keyExtractor={(item) => item.id}
+            data={[
+              ...pendingRecipes.filter((p) => !myRecipes.some((r) => r.videoId === p.videoId)),
+              ...myRecipes,
+            ] as any[]}
+            keyExtractor={(item) => item.id || `pending-${item.videoId}`}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.recipeListContent}
             ItemSeparatorComponent={() => <View style={{ width: s(10) }} />}
-            renderItem={({ item }) => (
-              <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />
-            )}
+            renderItem={({ item }) => {
+              if ('status' in item && (item.status === 'ANALYZING' || item.status === 'FAILED')) {
+                return <PendingVideoCard data={item as PendingRecipe} />;
+              }
+              return <HorizontalVideoCard data={item} onPress={() => goToRecipeDetail(item)} />;
+            }}
           />
         </View>
 
@@ -715,7 +751,7 @@ export default function Home() {
       <View style={styles.recentSectionBlock}>
         <View style={styles.recentHeaderRow}>
           <Text style={styles.sectionTitle}><Text style={{ color: BRAND }}>최근</Text> 레시피</Text>
-          <TouchableOpacity onPress={() => router.push('/my-recipes')}>
+          <TouchableOpacity onPress={() => router.push('/recent-recipes')}>
             <Text style={styles.recipeMoreText}>더보기 &gt;</Text>
           </TouchableOpacity>
         </View>
@@ -771,6 +807,33 @@ function RecentRecipeCard({ item, onPress, style }: { item: HomeRecipeItem; onPr
         </View>
       </View>
     </TouchableOpacity>
+  );
+}
+
+function PendingVideoCard({ data }: { data: PendingRecipe }) {
+  return (
+    <View style={[styles.hVideoCard, { opacity: data.status === 'FAILED' ? 0.7 : 1 }]}>
+      <View style={{ position: 'relative' }}>
+        <Image source={{ uri: data.thumbnailUrl }} style={styles.hThumb} borderRadius={s(14)} />
+        <View style={{
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: 'rgba(0,0,0,0.45)',
+          borderRadius: s(14),
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          {data.status === 'ANALYZING' && <ActivityIndicator size="small" color="#fff" />}
+        </View>
+      </View>
+      <Text style={styles.hTitle} numberOfLines={2}>{data.title}</Text>
+      <View style={styles.hChannelRow}>
+        <View style={[styles.hChannelProfile, { backgroundColor: '#DDE6E6' }]} />
+        <Text style={styles.hChannelName} numberOfLines={1}>{data.channelName}</Text>
+      </View>
+      <Text style={[styles.hPrice, { color: data.status === 'FAILED' ? '#D14B4B' : BRAND }]}>
+        {data.status === 'ANALYZING' ? '분석중...' : '분석 실패'}
+      </Text>
+    </View>
   );
 }
 

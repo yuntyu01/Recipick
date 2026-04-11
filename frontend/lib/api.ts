@@ -470,6 +470,7 @@ export interface LatestRecipe {
   category: string;
   created_at: string;
   sharer_nickname?: string;
+  total_estimated_price?: string | number;
   like_count?: string | number;
   comment_count?: string | number;
   share_count?: string | number;

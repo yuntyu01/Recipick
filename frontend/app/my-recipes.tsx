@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Dimensions,
     Image,
     RefreshControl,
@@ -14,6 +15,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+    buildUserHistoryPayloadFromRecipe,
+    createUserHistory,
     getMeWithToken,
     getRecipe,
     getUserHistory,
@@ -23,6 +26,14 @@ import {
     type UserHistoryItem,
     type UserHistoryRecipeData,
 } from '../lib/api';
+import {
+    getPendingRecipes,
+    removePending,
+    subscribePending,
+    updatePendingStatus,
+    type PendingRecipe,
+    type PendingStatus,
+} from '../lib/pending-recipes';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
 const FIGMA_W = 430;
@@ -68,35 +79,19 @@ function formatWon(value: any) {
     return `${num.toLocaleString('ko-KR')}원`;
 }
 
-// MyRecipesPage.tsx 파일 내부
-
 function mapHistoryItemToMyRecipe(item: any, index: number): MyRecipeItem {
-    // 1. 비디오 ID 추출
     const videoId = item.video_id ?? '';
-
-    // 2. URL 결정 (백엔드 필드명: url 혹은 original_url)
     const url = item.url || item.original_url || (videoId ? buildYoutubeUrl(videoId) : '');
 
     return {
-        // ID 생성 시 중복 방지
         id: `history-${videoId}-${index}`,
         videoId,
-
         title: item.title || '제목 없음',
-
-        // 백엔드 필드명: channel_name
         channelName: item.channel_name || '채널명 없음',
         channelProfileUrl: item.channel_profile_url || '',
-
-        // 백엔드 필드명: thumbnail_url
         thumbUrl: item.thumbnail_url || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : ''),
-
-        // 백엔드 필드명: total_estimated_price
         price: formatWon(item.total_estimated_price),
-
-        // [중요!] 백엔드 테스트 코드에서 'saved_at'이라는 필드명을 사용함
         createdAt: item.saved_at || item.created_at || '',
-
         category: item.category || '',
         url,
         recipeData: item.recipe_data ?? null,
@@ -116,6 +111,11 @@ export default function MyRecipesPage() {
     const [refreshing, setRefreshing] = useState(false);
     const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // 분석 대기 중인 레시피
+    const [pending, setPending] = useState<PendingRecipe[]>(getPendingRecipes());
+    const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+    const isFocused = useRef(false);
 
     const getAccessToken = async () => {
         const token =
@@ -155,6 +155,15 @@ export default function MyRecipesPage() {
             const mapped = historyItems.map(mapHistoryItemToMyRecipe);
 
             setItems(mapped);
+
+            // 이미 DB에 저장된 레시피는 pending에서 제거
+            const savedVideoIds = new Set(mapped.map((m) => m.videoId));
+            const currentPending = getPendingRecipes();
+            currentPending.forEach((p) => {
+                if (savedVideoIds.has(p.videoId) && p.status === 'COMPLETED') {
+                    removePending(p.videoId);
+                }
+            });
         } catch (e: any) {
             console.log('[MY RECIPES LOAD ERROR]', e);
             setItems([]);
@@ -165,10 +174,90 @@ export default function MyRecipesPage() {
         }
     }, []);
 
+    // pending store 구독
+    useEffect(() => {
+        const unsub = subscribePending(() => {
+            setPending(getPendingRecipes());
+        });
+        return unsub;
+    }, []);
+
+    // 분석 중인 아이템 폴링 (3분 타임아웃)
+    const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+
+    const pollAnalysis = useCallback(async (p: PendingRecipe) => {
+        if (p.status !== 'ANALYZING') return;
+
+        if (Date.now() - p.addedAt > POLL_TIMEOUT_MS) {
+            console.log('[POLL TIMEOUT]', p.videoId);
+            updatePendingStatus(p.videoId, 'FAILED');
+            return;
+        }
+
+        try {
+            const result = await getRecipe(p.videoId);
+
+            if (result.status === 'COMPLETED' && result.data) {
+                updatePendingStatus(p.videoId, 'COMPLETED');
+
+                // DB에 저장
+                try {
+                    const userId = await getCurrentUserId();
+                    if (userId) {
+                        const dataWithVideoId = { ...result.data, video_id: result.video_id ?? p.videoId };
+                        const payload = buildUserHistoryPayloadFromRecipe(dataWithVideoId);
+                        await createUserHistory(userId, payload);
+                    }
+                } catch (e) {
+                    console.log('[SAVE COMPLETED RECIPE ERROR]', e);
+                }
+
+                // pending에서 제거하고 목록 새로고침
+                removePending(p.videoId);
+                await loadMyRecipes();
+                return;
+            }
+
+            if (result.status === 'FAILED') {
+                updatePendingStatus(p.videoId, 'FAILED');
+                return;
+            }
+
+            // 아직 PROCESSING → 계속 폴링
+            if (isFocused.current) {
+                pollTimers.current[p.videoId] = setTimeout(() => pollAnalysis(p), 2000);
+            }
+        } catch (e) {
+            console.log('[POLL ERROR]', p.videoId, e);
+            // 네트워크 에러 등 → 재시도
+            if (isFocused.current) {
+                pollTimers.current[p.videoId] = setTimeout(() => pollAnalysis(p), 3000);
+            }
+        }
+    }, [loadMyRecipes]);
+
+    // 화면 포커스 시 폴링 시작
     useFocusEffect(
         useCallback(() => {
+            isFocused.current = true;
             loadMyRecipes();
-        }, [loadMyRecipes])
+
+            // 분석 중인 것들 폴링 시작
+            const currentPending = getPendingRecipes();
+            setPending(currentPending);
+            currentPending.forEach((p) => {
+                if (p.status === 'ANALYZING') {
+                    pollAnalysis(p);
+                }
+            });
+
+            return () => {
+                isFocused.current = false;
+                // 폴링 타이머 정리
+                Object.values(pollTimers.current).forEach(clearTimeout);
+                pollTimers.current = {};
+            };
+        }, [loadMyRecipes, pollAnalysis])
     );
 
     const goToRecipe = async (item: MyRecipeItem) => {
@@ -224,6 +313,10 @@ export default function MyRecipesPage() {
         }
     };
 
+    // pending 중 이미 DB에 있는 videoId는 제외
+    const savedVideoIds = new Set(items.map((i) => i.videoId));
+    const visiblePending = pending.filter((p) => !savedVideoIds.has(p.videoId));
+
     return (
         <ScrollView
             style={styles.screen}
@@ -245,7 +338,7 @@ export default function MyRecipesPage() {
                     <Ionicons name="arrow-back" size={22} color={TITLE} />
                 </TouchableOpacity>
 
-                <Text style={styles.headerTitle}>내 레시피</Text>
+                <Text style={styles.headerTitle}>나의 레시피</Text>
             </View>
 
             {loading && !refreshing && (
@@ -259,11 +352,53 @@ export default function MyRecipesPage() {
             {!!error && <Text style={styles.errorText}>{error}</Text>}
 
             <View style={styles.listWrap}>
+                {/* 분석 대기 중 / 실패 카드 */}
+                {visiblePending.map((p, idx) => (
+                    <View
+                        key={`pending-${p.videoId}`}
+                        style={[styles.card, idx > 0 && { marginTop: s(10) }]}
+                    >
+                        <View style={styles.cardInner}>
+                            <View style={styles.left}>
+                                <View style={styles.thumbWrap}>
+                                    <Thumb style={styles.thumb} borderRadius={s(13.5)} uri={p.thumbnailUrl} />
+                                    <View style={styles.overlay}>
+                                        {p.status === 'ANALYZING' && <ActivityIndicator size="small" color="#fff" />}
+                                    </View>
+                                </View>
+                            </View>
+
+                            <View style={styles.right}>
+                                <Text style={styles.title} numberOfLines={2}>
+                                    {p.title}
+                                </Text>
+
+                                <View style={styles.channelRow}>
+                                    <View style={[styles.channelAvatar, { borderRadius: 999, backgroundColor: THUMB_BG }]} />
+                                    <Text style={styles.channelName} numberOfLines={1}>
+                                        {p.channelName}
+                                    </Text>
+                                </View>
+
+                                <View style={styles.bottomRow}>
+                                    {p.status === 'ANALYZING' && (
+                                        <Text style={styles.analyzingText}>분석중...</Text>
+                                    )}
+                                    {p.status === 'FAILED' && (
+                                        <Text style={styles.failedText}>분석 실패</Text>
+                                    )}
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                ))}
+
+                {/* 저장된 레시피 */}
                 {items.map((r, idx) => (
                     <TouchableOpacity
                         key={r.id}
                         activeOpacity={0.92}
-                        style={[styles.card, idx > 0 && { marginTop: s(10) }]}
+                        style={[styles.card, (idx > 0 || visiblePending.length > 0) && { marginTop: s(10) }]}
                         onPress={() => goToRecipe(r)}
                     >
                         <View style={styles.cardInner}>
@@ -299,7 +434,7 @@ export default function MyRecipesPage() {
                     </TouchableOpacity>
                 ))}
 
-                {!loading && items.length === 0 && !error && (
+                {!loading && items.length === 0 && visiblePending.length === 0 && !error && (
                     <View style={styles.emptyBox}>
                         <Text style={styles.emptyText}>아직 저장한 레시피가 없어요.</Text>
                     </View>
@@ -389,9 +524,19 @@ const styles = StyleSheet.create({
     left: {
         width: '38%',
     },
+    thumbWrap: {
+        position: 'relative',
+    },
     thumb: {
         width: '100%',
         aspectRatio: 1.4,
+    },
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        borderRadius: s(13.5),
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 
     right: {
@@ -440,6 +585,16 @@ const styles = StyleSheet.create({
         fontSize: s(11),
         fontWeight: '900',
         color: SECTION,
+    },
+    analyzingText: {
+        fontSize: s(11),
+        fontWeight: '900',
+        color: '#54CDA4',
+    },
+    failedText: {
+        fontSize: s(11),
+        fontWeight: '900',
+        color: '#D14B4B',
     },
 
     emptyBox: {

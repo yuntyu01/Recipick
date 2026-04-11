@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getRecommendQuestions, postRecommendRecipes } from '../lib/api';
+import { getRecommendQuestions, getRecipe, postRecommendRecipes } from '../lib/api';
 
 const { width } = Dimensions.get('window');
 const s = (v: number) => Math.round(v * (width / 430));
@@ -23,9 +23,11 @@ export default function RecommendFlow() {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [isResult, setIsResult] = useState(false);
-  const [results, setResults] = useState<{recipes: any[], suggestions: any[]}>({ recipes: [], suggestions: [] });
-  const [displayData, setDisplayData] = useState<{recipes: any[], suggestions: any[]}>({ recipes: [], suggestions: [] });
+  const [results, setResults] = useState<{recipes: any[], suggestions: string[]}>({ recipes: [], suggestions: [] });
+  const [displayData, setDisplayData] = useState<{recipes: any[], suggestions: string[]}>({ recipes: [], suggestions: [] });
   const [submitting, setSubmitting] = useState(false);
+  const [askCount, setAskCount] = useState<number | null>(null);
+  const [askLimit, setAskLimit] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -58,7 +60,9 @@ export default function RecommendFlow() {
     try {
       const res = await postRecommendRecipes(answers);
       setResults({ recipes: res.recipes || [], suggestions: res.suggestions || [] });
-      shuffle(res.recipes, res.suggestions);
+      if (res.ai_ask_count != null) setAskCount(res.ai_ask_count);
+      if (res.ai_ask_limit != null) setAskLimit(res.ai_ask_limit);
+      shuffle(res.recipes || [], res.suggestions || []);
       setIsResult(true);
     } catch (e: any) {
       Alert.alert("알림", e.status === 429 ? "오늘 한도를 초과했습니다." : "요청 실패");
@@ -70,6 +74,36 @@ export default function RecommendFlow() {
       recipes: [...r].sort(() => Math.random() - 0.5).slice(0, 4),
       suggestions: [...s].sort(() => Math.random() - 0.5).slice(0, 4)
     });
+  };
+
+  const [recipeLoadingId, setRecipeLoadingId] = useState<string | null>(null);
+
+  const goToAnalyzedRecipe = async (item: any) => {
+    if (recipeLoadingId) return;
+    setRecipeLoadingId(item.video_id);
+    try {
+      const detail = await getRecipe(item.video_id);
+      if (detail.status === 'COMPLETED' && detail.data) {
+        router.push({
+          pathname: '/create-link',
+          params: {
+            video_id: detail.video_id,
+            title: detail.title || item.title,
+            channel_name: detail.channel_name || item.channel_name,
+            thumbnail_url: detail.thumbnail_url || item.thumbnail_url || '',
+            url: item.url || `https://www.youtube.com/watch?v=${detail.video_id}`,
+            link: item.url || `https://www.youtube.com/watch?v=${detail.video_id}`,
+            recipe_data: JSON.stringify(detail.data),
+          },
+        });
+      } else {
+        Alert.alert('알림', '아직 분석이 완료되지 않은 레시피예요.');
+      }
+    } catch (e) {
+      Alert.alert('오류', '레시피를 불러오지 못했어��.');
+    } finally {
+      setRecipeLoadingId(null);
+    }
   };
 
   if (loading) return <View style={styles.center}><ActivityIndicator color="#54CDA4" /></View>;
@@ -154,27 +188,63 @@ export default function RecommendFlow() {
       ) : (
         <ScrollView style={styles.scroll}>
           <View style={styles.padding}>
-            <Text style={styles.mintTitle}>분석 완료!</Text>
+            <Text style={styles.mintTitle}>이건 어때요?</Text>
             <Text style={styles.blackTitle}>딱 맞는 레시피를 찾았어요</Text>
+            <Text style={styles.greySubText}>마음에 드는 레시피를 눌러보세요!</Text>
+
             <View style={styles.resultGrid}>
-              {displayData.recipes.map((item, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.resultCard}
-                  onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: item.id, videoId: item.video_id } })}
-                >
-                  <View style={styles.thumbWrapper}>
-                    <Image source={{ uri: item.thumbnail_url }} style={styles.resultThumb} />
-                    <View style={styles.playIconBadge}><Ionicons name="play" size={14} color="white" /></View>
-                  </View>
-                  <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.resultSub}>{item.channel_name}</Text>
-                </TouchableOpacity>
-              ))}
+              {displayData.recipes.map((item, index) => {
+                const isLoading = recipeLoadingId === item.video_id;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.resultCard}
+                    activeOpacity={0.85}
+                    disabled={!!recipeLoadingId}
+                    onPress={() => goToAnalyzedRecipe(item)}
+                  >
+                    <View style={styles.thumbWrapper}>
+                      <Image source={{ uri: item.thumbnail_url }} style={styles.resultThumb} />
+                      {isLoading && (
+                        <View style={styles.loadingOverlay}>
+                          <ActivityIndicator size="small" color="#fff" />
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.resultTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={styles.resultSub} numberOfLines={1}>{item.channel_name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <TouchableOpacity style={styles.retryBtn} onPress={() => { setCurrentStep(0); setIsResult(false); setAnswers({}); }}>
-              <Text style={styles.retryBtnText}>다시 추천받기</Text>
+
+            {displayData.suggestions.length > 0 && (
+              <>
+                <Text style={[styles.mintTitle, { marginTop: s(30) }]}>이런 것도 있어요</Text>
+                <View style={styles.suggestionList}>
+                  {displayData.suggestions.map((text, index) => (
+                    <View key={index} style={styles.suggestionItem}>
+                      <Text style={styles.suggestionBullet}>•</Text>
+                      <Text style={styles.suggestionText} numberOfLines={1}>{text}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.shuffleBtn} onPress={() => shuffle(results.recipes, results.suggestions)}>
+              <Text style={styles.shuffleBtnText}>다른 레시피 보기</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setCurrentStep(0); setIsResult(false); setAnswers({}); }}>
+              <Text style={styles.retryBtnText}>처음부터 다시 추천받기</Text>
+            </TouchableOpacity>
+
+            {askCount != null && askLimit != null && (
+              <Text style={styles.askLimitText}>
+                오늘 {askLimit - askCount}회 남음 ({askCount}/{askLimit})
+              </Text>
+            )}
           </View>
         </ScrollView>
       )}
@@ -220,13 +290,20 @@ const styles = StyleSheet.create({
   nextBtnText: { color: '#FFF', fontSize: s(18), fontWeight: '800' },
 
   // 결과 화면용 스타일
-  resultGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: s(25) },
-  resultCard: { width: '48%', marginBottom: s(15) },
+  resultGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: s(20) },
+  resultCard: { width: '48%', marginBottom: s(16) },
   thumbWrapper: { position: 'relative' },
   resultThumb: { width: '100%', aspectRatio: 16 / 9, borderRadius: s(12), backgroundColor: '#F3F6F6' },
-  playIconBadge: { position: 'absolute', bottom: s(8), right: s(8), backgroundColor: 'rgba(0,0,0,0.6)', width: s(24), height: s(24), borderRadius: s(12), justifyContent: 'center', alignItems: 'center' },
-  resultTitle: { fontSize: s(14), fontWeight: '700', marginTop: s(8), color: '#333' },
-  resultSub: { fontSize: s(12), color: '#8A9B9A', marginTop: s(4), fontWeight: '600' },
-  retryBtn: { marginTop: s(20), height: s(50), borderRadius: s(12), borderWidth: 1.5, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', marginBottom: s(40) },
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: s(12), justifyContent: 'center', alignItems: 'center' },
+  resultTitle: { fontSize: s(13), fontWeight: '800', marginTop: s(8), color: '#3B4F4E', lineHeight: s(18) },
+  resultSub: { fontSize: s(11), color: '#8A9B9A', fontWeight: '600', marginTop: s(3) },
+  suggestionList: { marginTop: s(12) },
+  suggestionItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: s(10), borderBottomWidth: 1, borderBottomColor: '#F0F0F0', gap: s(8) },
+  suggestionBullet: { fontSize: s(16), color: '#54CDA4', fontWeight: '900' },
+  suggestionText: { fontSize: s(14), fontWeight: '700', color: '#3B4F4E', flex: 1 },
+  shuffleBtn: { marginTop: s(25), height: s(50), borderRadius: s(25), backgroundColor: '#54CDA4', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: s(6) },
+  shuffleBtnText: { fontSize: s(15), fontWeight: '800', color: '#fff' },
+  retryBtn: { marginTop: s(12), height: s(50), borderRadius: s(12), borderWidth: 1.5, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: s(6) },
   retryBtnText: { fontSize: s(15), fontWeight: '700', color: '#64748B' },
+  askLimitText: { fontSize: s(12), fontWeight: '700', color: '#8A9B9A', textAlign: 'right', marginTop: s(16), marginBottom: s(40) },
 });
