@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { buildUserHistoryPayloadFromRecipe, createUserHistory, getMeWithToken, getUserIdFromMe, updateHistoryMemo, type RecipeData } from '../lib/api';
+import { buildUserHistoryPayloadFromRecipe, createUserHistory, getHistoryMemo, getMeWithToken, getUserIdFromMe, updateHistoryMemo, type RecipeData } from '../lib/api';
 import { auth } from '../lib/firebase';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -335,10 +335,6 @@ export default function CreateLink() {
   const memoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resolvedUserId = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (recipeData?.memo) setMemo(recipeData.memo);
-  }, [recipeData]);
-
   const resolveUserId = async () => {
     if (resolvedUserId.current) return resolvedUserId.current;
     const user = auth.currentUser;
@@ -349,6 +345,23 @@ export default function CreateLink() {
     resolvedUserId.current = uid;
     return uid;
   };
+
+  useEffect(() => {
+    if (recipeData?.memo) setMemo(recipeData.memo);
+    // 서버에서 메모 불러오기
+    if (videoId) {
+      (async () => {
+        try {
+          const uid = await resolveUserId();
+          if (!uid) return;
+          const res = await getHistoryMemo(uid, videoId);
+          if (res?.memo) setMemo(res.memo);
+        } catch (e) {
+          // 히스토리 없으면 무시
+        }
+      })();
+    }
+  }, [recipeData]);
 
   const handleMemoChange = useCallback((text: string) => {
     setMemo(text);
