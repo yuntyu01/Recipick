@@ -24,7 +24,7 @@ import { useFrameProcessor, VisionCameraProxy, FrameProcessorPlugin, Frame, Came
 import { runOnJS } from 'react-native-reanimated';
 import YoutubePlayer from "react-native-youtube-iframe";
 
-const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands',{});
+//const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands',{});
 
 function detectHands(frame: Frame): any {
     'worklet';
@@ -96,6 +96,9 @@ function timestampToSec(ts?: string) {
 export default function CookScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+
+    const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands',{});
+
     const params = useLocalSearchParams();
     const device = useCameraDevice('back');
 
@@ -178,28 +181,24 @@ export default function CookScreen() {
     };
     const frameProcessor = useFrameProcessor((frame) => {
         'worklet';
-        // 네이티브에서 만든 'detectHands' 플러그인 호출
-        const hands = detectHands(frame) as any; 
+        if (plugin == null) return;
+
+        // 외부 함수 호출 대신 plugin.call 직접 사용
+        const hands = plugin.call(frame) as any;
 
         if (hands && hands.length > 0) {
             const hand = hands[0];
             if (hand.gesture === 'PALM') {
                 runOnJS(togglePlay)();
-            }
-            // 👈 왼쪽 스와이프: 이전 단계
-            else if (hand.gesture === 'SWIPE_LEFT') {
+            } else if (hand.gesture === 'SWIPE_LEFT') {
                 runOnJS(jumpToStep)(activeIdx - 1);
-            }
-            // 👉 오른쪽 스와이프: 다음 단계
-            else if (hand.gesture === 'SWIPE_RIGHT') {
+            } else if (hand.gesture === 'SWIPE_RIGHT') {
                 runOnJS(jumpToStep)(activeIdx + 1);
-            }
-            // 👌 OK 사인: 타이머 모달 열기
-            else if (hand.gesture === 'OK') {
+            } else if (hand.gesture === 'OK') {
                 runOnJS(setTimerOpen)(true);
             }
         }
-    }, [activeIdx]);
+    }, [activeIdx, plugin]);
     useEffect(() => {
         console.log('[COOK PARAMS]', params);
     }, [params]);
@@ -226,7 +225,11 @@ export default function CookScreen() {
         const targetStep = steps[next];
 
         setActiveIdx(next);
-        seekTo(targetStep.startSec);
+
+        // [수정] playerRef가 존재할 때만 즉시 이동
+        if (playerRef.current) {
+            playerRef.current.seekTo(Math.max(0, Math.floor(targetStep.startSec)), true);
+        }
 
         if ((targetStep.timerSec ?? 0) > 0) {
             setManualTimerSec(targetStep.timerSec ?? 0);

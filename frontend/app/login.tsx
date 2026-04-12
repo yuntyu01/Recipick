@@ -39,71 +39,60 @@ export default function LoginPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
-  const redirectUri = makeRedirectUri({
-  useProxy: true,
-} as any);
 
-const [request, response, promptAsync] = Google.useAuthRequest({
-  androidClientId: "549481647484-1nnosudvcos4btr683rh92lf23r8cam2.apps.googleusercontent.com",
-  iosClientId: "549481647484-bmquvsfr9sg4cfrnt0cpvi09ioktgb8u.apps.googleusercontent.com",
-  webClientId: "549481647484-7p2003hd98uqmfmgvsclffao7c8bu685.apps.googleusercontent.com", // ⭐ 이게 핵심
-  redirectUri,
-});
+  // 1. [수정] useProxy를 제거하고, app.json에 설정한 scheme을 사용합니다.
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: "549481647484-1nnosudvcos4btr683rh92lf23r8cam2.apps.googleusercontent.com",
+    iosClientId: "549481647484-bmquvsfr9sg4cfrnt0cpvi09ioktgb8u.apps.googleusercontent.com",
+    webClientId: "549481647484-7p2003hd98uqmfmgvsclffao7c8bu685.apps.googleusercontent.com",
+  });
 
   /* 🔥 앱 로그인 성공 처리 */
   useEffect(() => {
     const saveAppData = async () => {
+      // response가 돌아왔을 때 처리
       if (response?.type === "success") {
         const { authentication } = response;
+        const idToken = authentication?.idToken;
 
-        // 💡 [수정 포인트] Platform 체크를 추가해서 웹 에러 방지!
-        if (authentication?.idToken) {
+        if (idToken) {
           if (Platform.OS !== 'web') {
-            // 📱 앱 환경: SecureStore 사용
-            await SecureStore.setItemAsync("accessToken", authentication.idToken);
+            await SecureStore.setItemAsync("accessToken", idToken);
           } else {
-            // 🌐 웹 환경: localStorage 사용
-            localStorage.setItem("accessToken", authentication.idToken);
+            localStorage.setItem("accessToken", idToken);
           }
+          console.log("앱 로그인 성공 및 토큰 저장 완료!");
+          router.replace("/home");
         }
-
-        console.log("로그인 성공!", authentication);
-        router.replace("/home");
+      } else if (response?.type === "dismiss") {
+        setLoading(false); // 사용자가 취소했을 때 로딩 해제
       }
     };
 
     saveAppData();
   }, [response]);
 
-  /* 🔥 로그인 버튼 */
+  /* 🔥 로그인 버튼 로직 */
   const handleGoogleLogin = async () => {
     if (loading) return;
     setLoading(true);
 
     try {
       if (Platform.OS === "web") {
-        // 🌐 웹 로그인
+        // 웹은 기존 signInWithPopup 방식 유지
         const provider = new GoogleAuthProvider();
         const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-
-        const idToken = await user.getIdToken();
-
+        const idToken = await result.user.getIdToken();
         localStorage.setItem("accessToken", idToken);
-        localStorage.setItem("userId", user.uid);
-        localStorage.setItem("nickname", user.displayName || "사용자");
-        localStorage.setItem("profileImage", user.photoURL || "");
-
-        console.log("웹 로그인 성공!", user.displayName);
         router.replace("/home");
       } else {
-        // 📱 앱 로그인
-        await promptAsync();
+        // 📱 앱 로그인 실행
+        const result = await promptAsync();
+        if (result.type !== 'success') setLoading(false);
       }
     } catch (error) {
       console.error(error);
-      Alert.alert("로그인 실패", "문제가 발생했습니다.");
-    } finally {
+      Alert.alert("로그인 에러", "구글 인증에 실패했습니다.");
       setLoading(false);
     }
   };
