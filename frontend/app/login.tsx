@@ -48,6 +48,8 @@ export default function LoginPage() {
     scheme: "recipick",
   });
 
+  console.log("🔥 Redirect URI:", redirectUri);
+
   const [request, response, promptAsync] = Google.useAuthRequest({
     androidClientId: "1035075506580-3kof887vb36b6res4m0ejg9dn0dnep4j.apps.googleusercontent.com",
     iosClientId: "1035075506580-kmbkqr39j5f4e7bilcjr5ivpfrqvj0t9.apps.googleusercontent.com",
@@ -170,6 +172,9 @@ export default function LoginPage() {
         <View style={{ height: s(20) }} />
         <Text style={styles.footerText}>
           익명 로그인 시 기기 변경 시 데이터가 유실될 수 있습니다.
+        </Text>
+        <Text selectable style={{ fontSize: 10, color: '#999', textAlign: 'center', marginTop: 8 }}>
+          [DEBUG] {redirectUri}
         </Text>
       </View>
     </KeyboardAvoidingView>
