@@ -40,6 +40,7 @@ export default function LoginPage() {
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
 
+  // ✅ [해결] redirectUri 선언은 딱 한 번만 수행합니다.
   const redirectUri = makeRedirectUri({
     scheme: "recipick",
   });
@@ -51,23 +52,16 @@ export default function LoginPage() {
     redirectUri,
   });
 
-  const redirectUri = makeRedirectUri({
-    scheme: "recipick",
-  });
-
   /* 🔥 앱 로그인 성공 처리 */
   useEffect(() => {
     const saveAppData = async () => {
       if (response?.type === "success") {
         const { authentication } = response;
 
-        // 💡 [수정 포인트] Platform 체크를 추가해서 웹 에러 방지!
         if (authentication?.idToken) {
           if (Platform.OS !== 'web') {
-            // 📱 앱 환경: SecureStore 사용
             await SecureStore.setItemAsync("accessToken", authentication.idToken);
           } else {
-            // 🌐 웹 환경: localStorage 사용
             localStorage.setItem("accessToken", authentication.idToken);
           }
         }
@@ -87,11 +81,9 @@ export default function LoginPage() {
 
     try {
       if (Platform.OS === "web") {
-        // 🌐 웹 로그인
         const provider = new GoogleAuthProvider();
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
-
         const idToken = await user.getIdToken();
 
         localStorage.setItem("accessToken", idToken);
@@ -99,10 +91,8 @@ export default function LoginPage() {
         localStorage.setItem("nickname", user.displayName || "사용자");
         localStorage.setItem("profileImage", user.photoURL || "");
 
-        console.log("웹 로그인 성공!", user.displayName);
         router.replace("/home");
       } else {
-        // 📱 앱 로그인
         await promptAsync();
       }
     } catch (error) {
@@ -151,7 +141,6 @@ export default function LoginPage() {
           </Text>
         </TouchableOpacity>
 
-        <View style={{ height: s(20) }} />
         <Text style={styles.footerText}>
           앱/웹 모두 구글 로그인을 지원합니다.
         </Text>
