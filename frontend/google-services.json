@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1035075506580-s0voc2iqjf529ud6qdsfceib6drhbrvr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.knut.recipick",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
           "client_id": "1035075506580-8sha9t1t2mi2o66q2onjh3q4i7eq9c28.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -31,10 +39,10 @@
               "client_type": 3
             },
             {
-              "client_id": "1035075506580-kmbkqr39j5f4e7bilcjr5ivpfrqvj0t9.apps.googleusercontent.com",
+              "client_id": "1035075506580-59vgln601u0bgv1he6645rhof1nt31pe.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.anonymous.recipick"
+                "bundle_id": "com.knut.recipick"
               }
             }
           ]

@@ -42,9 +42,9 @@ export default function LoginPage() {
 
   // 1. [수정] useProxy를 제거하고, app.json에 설정한 scheme을 사용합니다.
   const [request, response, promptAsync] = Google.useAuthRequest({
-    androidClientId: "549481647484-1nnosudvcos4btr683rh92lf23r8cam2.apps.googleusercontent.com",
-    iosClientId: "549481647484-bmquvsfr9sg4cfrnt0cpvi09ioktgb8u.apps.googleusercontent.com",
-    webClientId: "549481647484-7p2003hd98uqmfmgvsclffao7c8bu685.apps.googleusercontent.com",
+    androidClientId: "1035075506580-3kof887vb36b6res4m0ejg9dn0dnep4j.apps.googleusercontent.com",
+    iosClientId: "1035075506580-kmbkqr39j5f4e7bilcjr5ivpfrqvj0t9.apps.googleusercontent.com",
+    webClientId: "1035075506580-8sha9t1t2mi2o66q2onjh3q4i7eq9c28.apps.googleusercontent.com",
   });
 
   /* 🔥 앱 로그인 성공 처리 */
