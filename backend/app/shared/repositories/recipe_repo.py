@@ -534,14 +534,14 @@ def get_latest_recipes(limit: int = 20) -> list:
 # ─────────────────────────────────────────────────────────────
 
 def search_recipes_by_title(keyword: str, limit: int = 20) -> list:
-    """COMPLETED 레시피 중 제목에 keyword가 포함된 레시피의 video_id, title만 반환."""
+    """COMPLETED 레시피 중 제목 또는 채널명에 keyword가 포함된 레시피를 반환."""
     results = []
     scan_kwargs = {
-        "FilterExpression": Attr("title").contains(keyword)
+        "FilterExpression": (Attr("title").contains(keyword) | Attr("channel_name").contains(keyword))
             & Attr("status").eq("COMPLETED")
             & Attr("PK").begins_with("VIDEO#")
             & Attr("SK").eq("INFO"),
-        "ProjectionExpression": "PK, title, thumbnail_url",
+        "ProjectionExpression": "PK, title, channel_name, thumbnail_url, channel_profile_url, original_url, category, like_count, comment_count, share_count, total_estimated_price",
     }
 
     while True:
@@ -551,7 +551,15 @@ def search_recipes_by_title(keyword: str, limit: int = 20) -> list:
             results.append({
                 "video_id": video_id,
                 "title": item.get("title") or "",
+                "channel_name": item.get("channel_name") or "",
                 "thumbnail_url": item.get("thumbnail_url") or f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                "channel_profile_url": item.get("channel_profile_url") or "",
+                "url": item.get("original_url") or f"https://www.youtube.com/watch?v={video_id}",
+                "category": item.get("category") or "",
+                "like_count": item.get("like_count") or 0,
+                "comment_count": item.get("comment_count") or 0,
+                "share_count": item.get("share_count") or 0,
+                "total_estimated_price": item.get("total_estimated_price"),
             })
             if len(results) >= limit:
                 return results

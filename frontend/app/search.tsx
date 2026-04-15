@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getRecipe,
-  searchRecipes,
+  searchRecipesByKeyword,
 } from '../lib/api';
 
 /* ================== FIGMA SCALE (430 기준) ================== */
@@ -106,31 +106,6 @@ export default function SearchPage() {
 
   const sortedResults = useMemo(() => sortResults(results, sortKey), [results, sortKey]);
 
-  const enrichWithDetails = async (items: SearchResultItem[]) => {
-    const enriched = await Promise.all(
-      items.map(async (item) => {
-        try {
-          const detail = await getRecipe(item.videoId);
-          if (detail.status === 'COMPLETED' && detail.data) {
-            return {
-              ...item,
-              totalEstimatedPrice: formatWon(detail.data.total_estimated_price),
-              totalEstimatedPriceRaw: toNum(detail.data.total_estimated_price),
-              likeCount: toNum(detail.data.like_count),
-              commentCount: toNum(detail.data.comment_count),
-              shareCount: toNum(detail.data.share_count),
-              detailLoaded: true,
-            };
-          }
-        } catch (e) {
-          // 상세 조회 실패 시 기본값 유지
-        }
-        return { ...item, detailLoaded: true };
-      })
-    );
-    return enriched;
-  };
-
   const handleSearch = async () => {
     const trimmed = query.trim();
     if (!trimmed) return;
@@ -141,8 +116,7 @@ export default function SearchPage() {
       setSearched(true);
       setSortKey('default');
 
-      const res = await searchRecipes(trimmed);
-      const list = res?.recipes ?? [];
+      const list = await searchRecipesByKeyword(trimmed);
 
       const basicItems: SearchResultItem[] = list.map((item: any) => ({
         id: `search-${item.video_id}`,
@@ -152,20 +126,16 @@ export default function SearchPage() {
         channelName: item.channel_name || '채널명 없음',
         channelProfileUrl: item.channel_profile_url || '',
         thumbUrl: item.thumbnail_url || '',
-        totalEstimatedPrice: '',
-        totalEstimatedPriceRaw: 0,
-        likeCount: 0,
-        commentCount: 0,
-        shareCount: 0,
-        detailLoaded: false,
+        totalEstimatedPrice: formatWon(item.total_estimated_price),
+        totalEstimatedPriceRaw: toNum(item.total_estimated_price),
+        likeCount: toNum(item.like_count),
+        commentCount: toNum(item.comment_count),
+        shareCount: toNum(item.share_count),
+        detailLoaded: true,
       }));
 
       setResults(basicItems);
       setLoading(false);
-
-      // 백그라운드에서 상세 정보 가져오기
-      const enriched = await enrichWithDetails(basicItems);
-      setResults(enriched);
     } catch (e: any) {
       console.log('[SEARCH ERROR]', e);
       setError(e?.message || '검색 중 오류가 발생했어요.');

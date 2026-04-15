@@ -727,3 +727,30 @@ export async function searchRecipes(query: string): Promise<SearchResponse> {
     { method: 'GET', token }
   );
 }
+
+/* =========================
+ * 제목/채널명 검색 API
+ * ========================= */
+
+export type TitleSearchResult = {
+  video_id: string;
+  title: string;
+  channel_name: string;
+  thumbnail_url: string;
+  channel_profile_url?: string;
+  url: string;
+  category: string;
+  like_count?: number;
+  comment_count?: number;
+  share_count?: number;
+  total_estimated_price?: number | string;
+};
+
+export async function searchRecipesByKeyword(keyword: string): Promise<TitleSearchResult[]> {
+  const token = await getStoredAccessToken();
+
+  return request<TitleSearchResult[]>(
+    `/api/recipes/search/title?keyword=${encodeURIComponent(keyword)}`,
+    { method: 'GET', token }
+  );
+}

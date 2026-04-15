@@ -505,9 +505,25 @@ export default function Home() {
         return;
       }
 
-      const safeTitle = videoMeta?.title?.trim() || '제목 없음';
-      const safeChannelName = videoMeta?.channelName?.trim() || '채널명 없음';
-      const thumbnailUrl = videoMeta?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      // videoMeta가 아직 없으면 (oEmbed 미완료/실패) 한 번 더 시도
+      let meta = videoMeta;
+      if (!meta) {
+        try {
+          const fetched = await buildYoutubeMetaFromUrl(trimmed);
+          meta = {
+            videoId: fetched.video_id,
+            title: fetched.title,
+            channelName: fetched.channel_name,
+            thumbnailUrl: fetched.thumbnail_url,
+          };
+        } catch {
+          // 실패하면 기본값으로 진행
+        }
+      }
+
+      const safeTitle = meta?.title?.trim() || '제목 없음';
+      const safeChannelName = meta?.channelName?.trim() || '채널명 없음';
+      const thumbnailUrl = meta?.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 
       // 분석 요청만 보내고 (fire-and-forget)
       analyzeRecipe({

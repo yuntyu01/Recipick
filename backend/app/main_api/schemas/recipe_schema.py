@@ -109,11 +109,19 @@ class RecipeLatestResponse(BaseModel):
     sharer_nickname: Optional[str] = ""
 
 
-# 제목 검색 결과 단건 응답
+# 제목/채널명 검색 결과 단건 응답
 class RecipeTitleSearchResponse(BaseModel):
     video_id: str
     title: str
+    channel_name: str = ""
     thumbnail_url: str
+    channel_profile_url: Optional[str] = ""
+    url: str = ""
+    category: str = ""
+    like_count: Optional[int] = 0
+    comment_count: Optional[int] = 0
+    share_count: Optional[int] = 0
+    total_estimated_price: Optional[int] = None
 
 
 # 재료 검색 결과의 연관 재료 집계 단건 (이름 + 등장 횟수)
