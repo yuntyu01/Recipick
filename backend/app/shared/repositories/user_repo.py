@@ -46,12 +46,18 @@ def add_user_history(
     created_at: Optional[str] = None
 ):
     # 중복 체크: 같은 user_id + video_id가 이미 있으면 저장하지 않음
-    existing = recipe_table.query(
-        KeyConditionExpression=Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
-        FilterExpression=Attr("video_id").eq(video_id),
-    )
-    if existing.get("Items"):
-        return existing["Items"][0]
+    # DynamoDB FilterExpression은 페이지 단위로 적용되므로 전체 페이지를 순회해야 함
+    query_kwargs = {
+        "KeyConditionExpression": Key("PK").eq(f"USER#{user_id}") & Key("SK").begins_with("HISTORY#"),
+        "FilterExpression": Attr("video_id").eq(video_id),
+    }
+    while True:
+        existing = recipe_table.query(**query_kwargs)
+        if existing.get("Items"):
+            return existing["Items"][0]
+        if "LastEvaluatedKey" not in existing:
+            break
+        query_kwargs["ExclusiveStartKey"] = existing["LastEvaluatedKey"]
 
     event_time = created_at or _utc_now_iso()
     recipe = recipe_table.get_item(

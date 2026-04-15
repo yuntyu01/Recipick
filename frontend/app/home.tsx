@@ -298,6 +298,7 @@ export default function Home() {
   };
 
   const goToRecipeDetail = async (item: HomeRecipeItem) => {
+    if (detailLoadingId) return;
     try {
       setAnalyzeError(null);
       setDetailLoadingId(item.id);
