@@ -1,194 +1,77 @@
-import React, { useEffect, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect } from "react";
 import { Stack, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import {
-  Alert,
+  ActivityIndicator,
   Dimensions,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { signInWithPopup, signInAnonymously, GoogleAuthProvider } from "firebase/auth";
-
-import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
-import { makeRedirectUri } from "expo-auth-session";
-
+import { signInAnonymously } from "firebase/auth";
 import { auth } from "../lib/firebase";
-
-WebBrowser.maybeCompleteAuthSession();
 
 /* ================== FIGMA SCALE ================== */
 const FIGMA_W = 430;
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
+const { width: SCREEN_W } = Dimensions.get("window");
 const SCALE = SCREEN_W / FIGMA_W;
 const s = (v: number) => Math.round(v * SCALE);
 
 const GREEN = "#48C7A0";
-const GREEN_SOFT = "#CFEFE3";
-const CARD = "#FFFFFF";
 const TEXT_DARK = "#0F172A";
-const TEXT_MUTED = "#64748B";
 
 export default function LoginPage() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [loading, setLoading] = useState(false);
-  const redirectUri = makeRedirectUri({
-  useProxy: true,
-} as any);
 
-const [request, response, promptAsync] = Google.useAuthRequest({
-  androidClientId: "549481647484-1nnosudvcos4btr683rh92lf23r8cam2.apps.googleusercontent.com",
-  iosClientId: "549481647484-bmquvsfr9sg4cfrnt0cpvi09ioktgb8u.apps.googleusercontent.com",
-  webClientId: "549481647484-7p2003hd98uqmfmgvsclffao7c8bu685.apps.googleusercontent.com", // ⭐ 이게 핵심
-  redirectUri,
-});
-
-  /* 🔥 앱 로그인 성공 처리 */
   useEffect(() => {
-    const saveAppData = async () => {
-      if (response?.type === "success") {
-        const { authentication } = response;
+    // 🚀 앱 진입 시 자동으로 익명 로그인을 실행합니다.
+    const autoLogin = async () => {
+      try {
+        const result = await signInAnonymously(auth);
+        const user = result.user;
+        const idToken = await user.getIdToken();
 
-        // 💡 [수정 포인트] Platform 체크를 추가해서 웹 에러 방지!
-        if (authentication?.idToken) {
-          if (Platform.OS !== 'web') {
-            // 📱 앱 환경: SecureStore 사용
-            await SecureStore.setItemAsync("accessToken", authentication.idToken);
-          } else {
-            // 🌐 웹 환경: localStorage 사용
-            localStorage.setItem("accessToken", authentication.idToken);
-          }
+        // 플랫폼(Web/App)에 따른 토큰 저장 처리
+        if (Platform.OS === "web") {
+          localStorage.setItem("accessToken", idToken);
+          localStorage.setItem("userId", user.uid);
+          localStorage.setItem("nickname", "게스트");
+        } else {
+          // 모바일 환경에서는 보안 저장소(SecureStore) 사용
+          await SecureStore.setItemAsync("accessToken", idToken);
         }
 
-        console.log("로그인 성공!", authentication);
+        console.log("자동 익명 로그인 성공! UID:", user.uid);
+
+        // 로그인이 완료되면 즉시 홈 화면으로 이동합니다.
         router.replace("/home");
+      } catch (error) {
+        console.error("자동 로그인 중 오류 발생:", error);
+        // 필요 시 여기서 에러 알림(Alert)을 띄울 수 있습니다.
       }
     };
 
-    saveAppData();
-  }, [response]);
-
-  /* 🔥 로그인 버튼 */
-  const handleGoogleLogin = async () => {
-    if (loading) return;
-    setLoading(true);
-
-    try {
-      if (Platform.OS === "web") {
-        // 🌐 웹 로그인
-        const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-
-        const idToken = await user.getIdToken();
-
-        localStorage.setItem("accessToken", idToken);
-        localStorage.setItem("userId", user.uid);
-        localStorage.setItem("nickname", user.displayName || "사용자");
-        localStorage.setItem("profileImage", user.photoURL || "");
-
-        console.log("웹 로그인 성공!", user.displayName);
-        router.replace("/home");
-      } else {
-        // 📱 앱 로그인
-        await promptAsync();
-      }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("로그인 실패", "문제가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAnonymousLogin = async () => {
-    if (loading) return;
-    setLoading(true);
-    try {
-      const result = await signInAnonymously(auth);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-
-      if (Platform.OS === "web") {
-        localStorage.setItem("accessToken", idToken);
-        localStorage.setItem("userId", user.uid);
-        localStorage.setItem("nickname", "게스트");
-      } else {
-        await SecureStore.setItemAsync("accessToken", idToken);
-      }
-
-      console.log("익명 로그인 성공!", user.uid);
-      router.replace("/home");
-    } catch (error) {
-      console.error(error);
-      Alert.alert("로그인 실패", "문제가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    autoLogin();
+  }, []);
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.screen, { paddingTop: insets.top }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* 상단 헤더 숨김 처리 */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      <View style={styles.topArea}>
+      <View style={styles.container}>
         <Text style={styles.logo}>Recipick!</Text>
-        <Text style={styles.subtitle}>
-          링크 하나로 레시피를 바로 만들어요
-        </Text>
+        <Text style={styles.subtitle}>사용자 정보를 확인하고 있습니다...</Text>
+
+        <View style={{ height: s(40) }} />
+
+        {/* 로그인 처리 중임을 보여주는 로딩 인디케이터 */}
+        <ActivityIndicator size="large" color={TEXT_DARK} />
       </View>
-
-      <View style={styles.card}>
-        <View style={styles.heroIconWrap}>
-          <Ionicons name="logo-google" size={s(34)} color={GREEN} />
-        </View>
-
-        <Text style={styles.title}>구글로 시작하기</Text>
-        <Text style={styles.desc}>
-          백엔드 서버와 연동하여{"\n"}
-          나만의 레시피를 안전하게 보관하세요.
-        </Text>
-
-        <View style={{ height: s(32) }} />
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleGoogleLogin}
-          style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
-          disabled={loading}
-        >
-          <Text style={styles.primaryBtnText}>
-            {loading ? "연결 중..." : "구글 계정으로 로그인"}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={{ height: s(12) }} />
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleAnonymousLogin}
-          style={[styles.skipBtn, loading && { opacity: 0.7 }]}
-          disabled={loading}
-        >
-          <Text style={styles.skipBtnText}>로그인 안 하기</Text>
-        </TouchableOpacity>
-
-        <View style={{ height: s(20) }} />
-        <Text style={styles.footerText}>
-          앱/웹 모두 구글 로그인을 지원합니다.
-        </Text>
-      </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -197,112 +80,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: GREEN,
   },
-  topArea: {
-    height: SCREEN_H * 0.2,
+  container: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: s(24),
   },
   logo: {
-    fontSize: s(30),
+    fontSize: s(40),
     fontWeight: "900",
     color: TEXT_DARK,
   },
   subtitle: {
-    marginTop: s(8),
-    fontSize: s(13),
+    marginTop: s(10),
+    fontSize: s(16),
     fontWeight: "700",
     color: TEXT_DARK,
-    opacity: 0.75,
-    textAlign: "center",
-  },
-  card: {
-    flex: 1,
-    backgroundColor: CARD,
-    borderTopLeftRadius: s(42),
-    borderTopRightRadius: s(42),
-    paddingTop: s(32),
-    paddingHorizontal: s(28),
-  },
-  heroIconWrap: {
-    width: s(68),
-    height: s(68),
-    borderRadius: s(34),
-    backgroundColor: GREEN_SOFT,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-  },
-  title: {
-    marginTop: s(18),
-    fontSize: s(22),
-    fontWeight: "900",
-    color: TEXT_DARK,
-    textAlign: "center",
-  },
-  desc: {
-    marginTop: s(10),
-    fontSize: s(13),
-    lineHeight: s(20),
-    fontWeight: "700",
-    color: TEXT_MUTED,
-    textAlign: "center",
-  },
-  primaryBtn: {
-    height: s(52),
-    borderRadius: s(26),
-    backgroundColor: GREEN,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: s(10),
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: s(8),
-    shadowOffset: { width: 0, height: s(4) },
-    elevation: 3,
-  },
-  primaryBtnText: {
-    color: "#FFFFFF",
-    fontSize: s(15),
-    fontWeight: "900",
-  },
-  skipBtn: {
-    height: s(52),
-    borderRadius: s(26),
-    backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: "#D1D5DB",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  skipBtnText: {
-    color: TEXT_MUTED,
-    fontSize: s(15),
-    fontWeight: "800",
-  },
-  noticeBox: {
-    borderWidth: 1,
-    borderColor: "#E7ECEF", // BORDER 변수 대신 직접 넣거나 위에 정의된 값을 쓰세요
-    borderRadius: s(16),
-    paddingVertical: s(14),
-    paddingHorizontal: s(14),
-    backgroundColor: "#F8FAFB",
-    gap: s(8),
-  },
-  noticeText: {
-    fontSize: s(12),
-    lineHeight: s(18),
-    fontWeight: "700",
-    color: TEXT_MUTED,
-  },
-  // 🟢 여기에 footerText가 들어가야 합니다!
-  footerText: {
-    fontSize: s(12),
-    color: TEXT_MUTED,
-    textAlign: "center",
-    marginTop: s(10),
-    fontWeight: "600",
+    opacity: 0.8,
   },
 });
