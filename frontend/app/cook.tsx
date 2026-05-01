@@ -182,6 +182,7 @@ export default function CookScreen() {
     const playerRef = useRef<YoutubePlayerRef | null>(null);
     useEffect(() => {
         console.log('[isPlaying]', isPlaying);
+        isPlayingRef.current = isPlaying;
     }, [isPlaying]);
     const youtubeWebViewRef = useRef<any>(null);
 
@@ -189,7 +190,7 @@ export default function CookScreen() {
     const handleGestureMessage = (gesture: string) => {
         if (gesture === 'PALM') {
             gestureRef.current = true;
-            const playing = isPlaying;
+            const playing = isPlayingRef.current;
             if (playing) {
                 youtubeWebViewRef.current?.injectJavaScript('player.pauseVideo(); true;');
                 setIsPlaying(false);
@@ -215,7 +216,11 @@ export default function CookScreen() {
 
     // 상단에 ref 추가
     const gestureRef = useRef(false); 
-
+    const isPlayingRef = useRef(isPlaying);
+    
+    useEffect(() => {
+        isPlayingRef.current = isPlaying;
+    }, [isPlaying]);
     const playVideo = () => {
     //playerRef.current?.playVideo();
         setIsPlaying(true);
@@ -852,7 +857,7 @@ const styles = StyleSheet.create({
 
     gestureOverlay: {
         position: 'absolute',
-        bottom: 96,
+        top: 320,
         right: 16,
         width: 100,
         height: 150,
