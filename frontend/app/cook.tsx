@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
+    PermissionsAndroid,
     Dimensions,
     Linking,
     Modal,
     PanResponder,
     Platform,
     ScrollView,
+    StyleProp,
     StyleSheet,
     Text,
     TextInput,
+    TextStyle,
     TouchableOpacity,
     Vibration,
     View,
@@ -20,17 +23,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import { Audio } from 'expo-av';
 import VoiceSearch from '../components/VoiceSearch';
-import { useFrameProcessor, VisionCameraProxy, FrameProcessorPlugin, Frame, Camera, useCameraDevice } from 'react-native-vision-camera';
-import { runOnJS } from 'react-native-reanimated';
 import YoutubePlayer from "react-native-youtube-iframe";
-
-const plugin = VisionCameraProxy.initFrameProcessorPlugin('detectHands',{});
-
-function detectHands(frame: Frame): any {
-    'worklet';
-    if (plugin == null) return null;
-    return plugin.call(frame);
-}
+import { gestureHtml } from '../lib/gestureHtml';
 
 const BRAND = '#54CDA4';
 const BG = '#F3F6F6';
@@ -53,6 +47,22 @@ type Ingredient = {
     id: string;
     name: string;
     amount: string;
+};
+
+type RawStep = {
+    step?: number;
+    desc?: string;
+    video_timestamp?: string;
+    timer_sec?: number | string;
+};
+
+type RawIngredient = {
+    name?: unknown;
+    amount?: unknown;
+};
+
+type YoutubePlayerRef = {
+    seekTo: (seconds: number, allowSeekAhead: boolean) => void;
 };
 
 function firstString(v: string | string[] | undefined) {
@@ -97,7 +107,6 @@ export default function CookScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
-    const device = useCameraDevice('back');
 
 
 
@@ -118,7 +127,7 @@ export default function CookScreen() {
     const steps: Step[] = useMemo(() => {
         if (!recipeData?.steps || !Array.isArray(recipeData.steps)) return [];
 
-        return recipeData.steps.map((item: any, index: number) => ({
+        return recipeData.steps.map((item: RawStep, index: number) => ({
             id: `s${item.step ?? index + 1}`,
             title: `STEP ${item.step ?? index + 1}`,
             body: item.desc ?? '',
@@ -129,7 +138,7 @@ export default function CookScreen() {
 
     const ingredients: Ingredient[] = useMemo(() => {
         if (!recipeData?.ingredients || !Array.isArray(recipeData.ingredients)) return [];
-        return recipeData.ingredients.map((item: any, index: number) => ({
+        return recipeData.ingredients.map((item: RawIngredient, index: number) => ({
             id: item?.name ? `${item.name}-${index}` : `ingredient-${index}`,
             name: String(item?.name ?? '재료').trim(),
             amount: String(item?.amount ?? '').trim(),
@@ -170,52 +179,50 @@ export default function CookScreen() {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    const playerRef = useRef<any>(null);
-    const detectHands = (frame: Frame) => {
-        'worklet';
-        if (plugin == null) return null;
-        return plugin.call(frame);
-    };
-    const frameProcessor = useFrameProcessor((frame) => {
-        'worklet';
-        // 네이티브에서 만든 'detectHands' 플러그인 호출
-        const hands = detectHands(frame) as any; 
+    const playerRef = useRef<YoutubePlayerRef | null>(null);
+    useEffect(() => {
+        console.log('[isPlaying]', isPlaying);
+    }, [isPlaying]);
+    const youtubeWebViewRef = useRef<any>(null);
 
-        if (hands && hands.length > 0) {
-            const hand = hands[0];
-            if (hand.gesture === 'PALM') {
-                runOnJS(togglePlay)();
+    // handleGestureMessage 수정
+    const handleGestureMessage = (gesture: string) => {
+        if (gesture === 'PALM') {
+            gestureRef.current = true;
+            const playing = isPlaying;
+            if (playing) {
+                youtubeWebViewRef.current?.injectJavaScript('player.pauseVideo(); true;');
+                setIsPlaying(false);
+            } else {
+                youtubeWebViewRef.current?.injectJavaScript('player.playVideo(); true;');
+                setIsPlaying(true);
             }
-            // 👈 왼쪽 스와이프: 이전 단계
-            else if (hand.gesture === 'SWIPE_LEFT') {
-                runOnJS(jumpToStep)(activeIdx - 1);
-            }
-            // 👉 오른쪽 스와이프: 다음 단계
-            else if (hand.gesture === 'SWIPE_RIGHT') {
-                runOnJS(jumpToStep)(activeIdx + 1);
-            }
-            // 👌 OK 사인: 타이머 모달 열기
-            else if (hand.gesture === 'OK') {
-                runOnJS(setTimerOpen)(true);
-            }
+            setTimeout(() => { gestureRef.current = false; }, 1000);
         }
-    }, [activeIdx]);
+        else if (gesture === 'SWIPE_LEFT') jumpToStep(activeIdx - 1);
+        else if (gesture === 'SWIPE_RIGHT') jumpToStep(activeIdx + 1);
+        else if (gesture === 'OK') setTimerOpen(true);
+    };
     useEffect(() => {
         console.log('[COOK PARAMS]', params);
     }, [params]);
 
     const seekTo = (sec: number) => {
-        // ✅ 직접 명령 전달: playerRef가 연결되어 있다면 해당 초(sec)로 즉시 점프!
         if (playerRef.current) {
             playerRef.current.seekTo(Math.max(0, Math.floor(sec)), true);
         }
     };
 
+    // 상단에 ref 추가
+    const gestureRef = useRef(false); 
+
     const playVideo = () => {
+    //playerRef.current?.playVideo();
         setIsPlaying(true);
     };
 
     const pauseVideo = () => {
+    //playerRef.current?.pauseVideo?.();
         setIsPlaying(false);
     };
 
@@ -306,6 +313,19 @@ export default function CookScreen() {
         }
     };
 
+    useEffect(() => {
+        if (Platform.OS === 'android') {
+            PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.CAMERA,
+                {
+                    title: '카메라 권한 요청',
+                    message: '손 제스처 인식을 위해 카메라 권한이 필요해요.',
+                    buttonPositive: '허용',
+                    buttonNegative: '거부',
+                }
+            );
+        }
+    }, []);
     useEffect(() => {
         Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
@@ -450,13 +470,9 @@ export default function CookScreen() {
 
     const togglePlay = () => {
         if (alarmOpen || videoError) return;
-
-        setIsPlaying((prev) => {
-            const next = !prev;
-            if (next) playVideo();
-            else pauseVideo();
-            return next;
-        });
+        gestureRef.current = true;
+        setIsPlaying(prev => !prev);
+        setTimeout(() => { gestureRef.current = false; }, 1000);
     };
 
     const panResponder = useMemo(
@@ -491,18 +507,21 @@ export default function CookScreen() {
                                 height={VIDEO_H}
                                 play={isPlaying}
                                 videoId={videoId}
-                                onChangeState={(state : string) => {
+                                // YoutubePlayer onChangeState 수정
+                                onChangeState={(state: string) => {
+                                    if (gestureRef.current) return;        // 제스처 중엔 무시
                                     if (state === "ended") setIsPlaying(false);
-                                    if (state === "playing") setIsPlaying(true);
+                                    if (state === "playing") setIsPlaying(true);   // ← 주석 해제
                                     if (state === "paused") setIsPlaying(false);
                                 }}
                                 webViewProps={{
+                                    ref: youtubeWebViewRef, 
                                     androidLayerType: "hardware",
                                     allowsFullscreenVideo: true,
                                     userAgent: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
                                 }}
                                 onReady={() => setVideoError(false)}
-                                onError={(e : any) => {
+                                onError={(e: string) => {
                                     console.log('[YOUTUBE ERROR]', e);
                                     setVideoError(true);
                                 }}
@@ -581,24 +600,12 @@ export default function CookScreen() {
                     <View style={styles.hintBox}>
                         <Text style={styles.hintTitle}>손동작으로 조절해봐요!</Text>
                         <Text style={styles.hintLine}>멈춤 ✋</Text>
-                        <Text style={styles.hintLine}>이전으로🫲 (왼쪽으로 스와이프)</Text>
-                        <Text style={styles.hintLine}>다음으로 🫱 (오른쪽으로 스와이프)</Text>
+                        <Text style={styles.hintLine}>이전으로 👈 (검지로 왼쪽을 가리키세요)</Text>
+                        <Text style={styles.hintLine}>다음으로 👉 (검지로 오른쪽을 가리키세요)</Text>
                         <Text style={styles.hintLine}>타이머👌</Text>
                     </View>
                     
-                    <View style={styles.cameraPreviewContainer}>
-                        {device != null && (
-                            <Camera
-                                style={styles.miniCamera}
-                                device={device}
-                                isActive={true}
-                                frameProcessor={frameProcessor}
-                                pixelFormat="yuv"
-                                enableZoomGesture={false}
-                            />
-                        )}
-                        <Text style={styles.cameraLabel}>손 인식 중...</Text>
-                    </View>
+
                 </View>
                 <View style={styles.stepsArea} {...panResponder.panHandlers}>
                     {steps.length > 0 ? (
@@ -646,6 +653,25 @@ export default function CookScreen() {
                     )}
                 </View>
             </ScrollView>
+
+            <View style={styles.gestureOverlay} pointerEvents="box-none">
+                <WebView
+                    style={StyleSheet.absoluteFill}
+                    source={{ uri : 'https://curious-jalebi-61448d.netlify.app/gesture.html' }}
+                    javaScriptEnabled={true}
+                    allowsInlineMediaPlayback={true}
+                    mediaPlaybackRequiresUserAction={false}
+                    mediaCapturePermissionGrantType="grant"
+                    originWhitelist={['*']}
+                    onPermissionRequest={(request: any) => request.grant()}
+                    domStorageEnabled={true}
+                    allowFileAccess={true}
+                    mixedContentMode="always"
+                    onMessage={(event) => {console.log('[GESTURE 수신]', event.nativeEvent.data); // 임시 추가
+                        handleGestureMessage(event.nativeEvent.data);
+                    }}
+                />
+            </View>
 
             <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                 <TouchableOpacity activeOpacity={0.9} style={styles.circleBtn} onPress={() => setTimerOpen(true)}>
@@ -729,7 +755,6 @@ export default function CookScreen() {
                 <Text style={styles.voiceTitle}>말하세요</Text>
                 <Text style={styles.voiceSub}>{voiceStatusText}</Text>
 
-                {/* ✅ 여기 추가 */}
                 <VoiceSearch 
                     videoId={videoId} 
                     currentStep={activeIdx} 
@@ -785,7 +810,7 @@ function AnimatedTextInput({
     value: string;
     onChangeText: (text: string) => void;
     placeholder: string;
-    style: any;
+    style: StyleProp<TextStyle>;
     maxLength: number;
 }) {
     return (
@@ -825,6 +850,19 @@ const styles = StyleSheet.create({
         elevation: 3,                // 그림자 효과
     },
 
+    gestureOverlay: {
+        position: 'absolute',
+        bottom: 96,
+        right: 16,
+        width: 100,
+        height: 150,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+        borderWidth: 2,
+        borderColor: BRAND,
+        zIndex: 200,
+    },
     cameraPreviewContainer: {
         width: 80,  // 가로 크기
         height: 100, // 세로 크기
