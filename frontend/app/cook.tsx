@@ -25,6 +25,7 @@ import { Audio } from 'expo-av';
 import VoiceSearch from '../components/VoiceSearch';
 import YoutubePlayer from "react-native-youtube-iframe";
 import { gestureHtml } from '../lib/gestureHtml';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BRAND = '#54CDA4';
 const BG = '#F3F6F6';
@@ -33,7 +34,7 @@ const TEXT = '#3B4F4E';
 const MUTED = '#8A9B9A';
 const DANGER = '#FF6B6B';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 type Step = {
     id: string;
@@ -157,8 +158,26 @@ export default function CookScreen() {
     }, [steps, ingredients]);
 
     const [activeIdx, setActiveIdx] = useState(0);
+    const scrollRef = useRef<ScrollView>(null);
+    const stepYPositions = useRef<number[]>([]);
+    const stepsAreaY = useRef(0);
     const webRef = useRef<WebView>(null);
 
+    const [fabOpen, setFabOpen] = useState(false);
+    const [guideOpen, setGuideOpen] = useState(false);
+    const [testGesture, setTestGesture] = useState('');
+    const [guideDontShow, setGuideDontShow] = useState(false);
+
+    useEffect(() => {
+        AsyncStorage.getItem('cook_guide_hidden').then((val) => {
+            if (val !== 'true') setGuideOpen(true);
+        });
+    }, []);
+
+    const closeGuide = () => {
+        setGuideOpen(false);
+        setTestGesture('');
+    };
     const [timerOpen, setTimerOpen] = useState(false);
     const [voiceOpen, setVoiceOpen] = useState(false);
     const [alarmOpen, setAlarmOpen] = useState(false);
@@ -239,6 +258,10 @@ export default function CookScreen() {
 
         setActiveIdx(next);
         seekTo(targetStep.startSec);
+
+        if (scrollRef.current && stepYPositions.current[next] != null) {
+            scrollRef.current.scrollTo({ y: Math.max(0, stepsAreaY.current + stepYPositions.current[next] - SCREEN_H + 315), animated: true });
+        }
 
         if ((targetStep.timerSec ?? 0) > 0) {
             setManualTimerSec(targetStep.timerSec ?? 0);
@@ -446,7 +469,6 @@ export default function CookScreen() {
     }, [remainingSec]);
 
     useEffect(() => {
-        if (!isPlaying) return;
         if (remainingSec <= 0) return;
         if (alarmOpen) return;
 
@@ -455,7 +477,7 @@ export default function CookScreen() {
         }, 1000);
 
         return () => clearInterval(id);
-    }, [isPlaying, remainingSec, alarmOpen]);
+    }, [remainingSec, alarmOpen]);
 
     useEffect(() => {
         if (!isPlaying) return;
@@ -565,58 +587,38 @@ export default function CookScreen() {
                 </View>
             </View>
 
+            <View style={[styles.progressFixed, { top: VIDEO_H + insets.top }]}>
+                <View style={styles.progressRow}>
+                    {steps.length > 0 ? (
+                        steps.map((_, i) => {
+                            const active = i === activeIdx;
+                            return (
+                                <TouchableOpacity
+                                    key={steps[i].id}
+                                    activeOpacity={0.85}
+                                    onPress={() => jumpToStep(i)}
+                                    style={[styles.progressSeg, active && styles.progressSegActive]}
+                                />
+                            );
+                        })
+                    ) : (
+                        <View style={styles.progressSeg} />
+                    )}
+                </View>
+            </View>
+
             <ScrollView
+                ref={scrollRef}
                 style={{ flex: 1, backgroundColor: BG }}
-                contentContainerStyle={{ paddingTop: VIDEO_H + insets.top, paddingBottom: 150 }}
+                contentContainerStyle={{ paddingTop: VIDEO_H + insets.top + 30, paddingBottom: 150 }}
                 showsVerticalScrollIndicator={false}
             >
-                <View style={styles.controlRow}>
-                    <TouchableOpacity onPress={togglePlay} activeOpacity={0.8} style={styles.headerIconBtn}>
-                        <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color={TEXT} />
-                    </TouchableOpacity>
 
-                    <View style={styles.timerPill}>
-                        <Ionicons name="alarm-outline" size={14} color={TEXT} />
-                        <Text style={styles.timerPillText}>{formatMMSS(remainingSec)}</Text>
-                    </View>
-                </View>
-
-                <View style={styles.progressWrap}>
-                    <View style={styles.progressRow}>
-                        {steps.length > 0 ? (
-                            steps.map((_, i) => {
-                                const active = i === activeIdx;
-                                return (
-                                    <TouchableOpacity
-                                        key={steps[i].id}
-                                        activeOpacity={0.85}
-                                        onPress={() => jumpToStep(i)}
-                                        style={[styles.progressSeg, active && styles.progressSegActive]}
-                                    />
-                                );
-                            })
-                        ) : (
-                            <View style={styles.progressSeg} />
-                        )}
-                    </View>
-                </View>
-
-                <View style={styles.hintAndCameraRow}>
-                    <View style={styles.hintBox}>
-                        <Text style={styles.hintTitle}>손동작으로 조절해봐요!</Text>
-                        <Text style={styles.hintLine}>멈춤 ✋</Text>
-                        <Text style={styles.hintLine}>이전으로 👈 (검지로 왼쪽을 가리키세요)</Text>
-                        <Text style={styles.hintLine}>다음으로 👉 (검지로 오른쪽을 가리키세요)</Text>
-                        <Text style={styles.hintLine}>타이머👌</Text>
-                    </View>
-                    
-
-                </View>
-                <View style={styles.stepsArea} {...panResponder.panHandlers}>
+                <View style={styles.stepsArea} {...panResponder.panHandlers} onLayout={(e) => { stepsAreaY.current = e.nativeEvent.layout.y; }}>
                     {steps.length > 0 ? (
                         steps.map((s, idx) => {
                             const active = idx === activeIdx;
-                            const mt = idx === 0 ? 0 : 22;
+                            const mt = idx === 0 ? 0 : 10;
 
                             return (
                                 <TouchableOpacity
@@ -624,6 +626,9 @@ export default function CookScreen() {
                                     activeOpacity={0.92}
                                     onPress={() => jumpToStep(idx)}
                                     style={{ marginTop: mt }}
+                                    onLayout={(e) => {
+                                        stepYPositions.current[idx] = e.nativeEvent.layout.y;
+                                    }}
                                 >
                                     <View style={[styles.stepCard, active && styles.stepCardActive]}>
                                         <View style={styles.stepTopRow}>
@@ -678,15 +683,122 @@ export default function CookScreen() {
                 />
             </View>
 
-            <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-                <TouchableOpacity activeOpacity={0.9} style={styles.circleBtn} onPress={() => setTimerOpen(true)}>
-                    <Ionicons name="alarm-outline" size={22} color="#fff" />
-                </TouchableOpacity>
+            {fabOpen && (
+                <View style={[styles.bottomTabBar, { paddingBottom: 5 }]}>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.bottomTabItem} onPress={() => { setFabOpen(false); openVoiceModal(); }}>
+                        <Ionicons name="mic" size={24} color={MUTED} />
+                        <Text style={styles.bottomTabLabel}>음성</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.bottomTabItem} onPress={() => { setFabOpen(false); setTimerOpen(true); }}>
+                        {remainingSec > 0 ? (
+                            <Text style={styles.bottomTabTimer}>{formatMMSS(remainingSec)}</Text>
+                        ) : (
+                            <Ionicons name="alarm" size={24} color={MUTED} />
+                        )}
+                        <Text style={styles.bottomTabLabel}>타이머</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.bottomTabItem} onPress={() => { setFabOpen(false); setGuideOpen(true); }}>
+                        <Text style={{ color: MUTED, fontSize: 22, fontWeight: '900' }}>?</Text>
+                        <Text style={styles.bottomTabLabel}>가이드</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity activeOpacity={0.7} style={styles.bottomTabItem} onPress={() => setFabOpen(false)}>
+                        <Ionicons name="close" size={28} color={MUTED} />
+                        <Text style={styles.bottomTabLabel}>닫기</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
 
-                <TouchableOpacity activeOpacity={0.9} style={styles.circleBtn} onPress={openVoiceModal}>
-                    <Ionicons name="mic" size={22} color="#fff" />
+            <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.fabBtn, { bottom: 12, right: 110, display: fabOpen ? 'none' : 'flex' }]}
+                onPress={() => setFabOpen(true)}
+            >
+                {remainingSec > 0 ? (
+                    <Text style={{ color: MUTED, fontSize: 12, fontWeight: '700' }}>{formatMMSS(remainingSec)}</Text>
+                ) : (
+                    <Ionicons name="ellipsis-horizontal" size={22} color={MUTED} />
+                )}
+            </TouchableOpacity>
+
+            <Modal visible={guideOpen} transparent animationType="fade" onRequestClose={() => { closeGuide(); }}>
+                <TouchableOpacity style={styles.modalBack} activeOpacity={1} onPress={() => { closeGuide(); }}>
+                    <View style={styles.guideCard} onStartShouldSetResponder={() => true}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                            <Text style={styles.guideTitle}>사용 가이드</Text>
+                            <TouchableOpacity onPress={() => { closeGuide(); }} hitSlop={14} style={{ padding: 2 }}>
+                                <Ionicons name="close" size={22} color={MUTED} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.guideTestWrap}>
+                            <View style={styles.guideTestCamera}>
+                                <WebView
+                                    style={StyleSheet.absoluteFill}
+                                    source={{ uri: 'https://curious-jalebi-61448d.netlify.app/gesture.html' }}
+                                    javaScriptEnabled={true}
+                                    allowsInlineMediaPlayback={true}
+                                    mediaPlaybackRequiresUserAction={false}
+                                    mediaCapturePermissionGrantType="grant"
+                                    onMessage={(event) => {
+                                        const g = event.nativeEvent.data;
+                                        const labels: Record<string, string> = {
+                                            PALM: '✋ 멈춤',
+                                            SWIPE_LEFT: '👈 이전',
+                                            SWIPE_RIGHT: '👉 다음',
+                                            OK: '👌 타이머',
+                                        };
+                                        setTestGesture(labels[g] || g);
+                                        setTimeout(() => setTestGesture(''), 1500);
+                                    }}
+                                />
+                            </View>
+                            <View style={styles.guideTestResult}>
+                                <Text style={styles.guideTestGesture}>{testGesture || '손동작을 해보세요'}</Text>
+                                <View style={{ height: 10 }} />
+                                <Text style={styles.guideItem}>✋  재생 / 일시정지</Text>
+                                <Text style={styles.guideItem}>👈  이전 단계</Text>
+                                <Text style={styles.guideItem}>👉  다음 단계</Text>
+                                <Text style={styles.guideItem}>👌  타이머 열기</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.guideDivider} />
+
+                        <Text style={styles.guideSectionTitle}>화면 조작</Text>
+                        <Text style={styles.guideItem}>카드를 터치하면 해당 단계로 이동</Text>
+                        <Text style={styles.guideItem}>좌우 스와이프로 단계 전환</Text>
+                        <Text style={styles.guideItem}>우측 하단 카메라로 제스처 인식</Text>
+
+                        <View style={styles.guideDivider} />
+
+                        <Text style={styles.guideSectionTitle}>음성 / 타이머</Text>
+                        <Text style={styles.guideItem}>🎤  음성으로 요리 관련 질문</Text>
+                        <Text style={styles.guideItem}>⏰  타이머 설정 시 자동 알림</Text>
+
+                        <View style={{ height: 20 }} />
+
+                        <View style={styles.guideButtonRow}>
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                style={styles.guideButtonGhost}
+                                onPress={() => {
+                                    AsyncStorage.setItem('cook_guide_hidden', 'true');
+                                    closeGuide();
+                                }}
+                            >
+                                <Text style={styles.guideButtonGhostText}>다시 안 보기</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                activeOpacity={0.8}
+                                style={styles.guideButtonFill}
+                                onPress={() => closeGuide()}
+                            >
+                                <Text style={styles.guideButtonFillText}>닫기</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
                 </TouchableOpacity>
-            </View>
+            </Modal>
 
             <Modal visible={timerOpen} transparent animationType="fade" onRequestClose={() => setTimerOpen(false)}>
                 <View style={styles.modalBack}>
@@ -857,8 +969,8 @@ const styles = StyleSheet.create({
 
     gestureOverlay: {
         position: 'absolute',
-        top: 320,
-        right: 16,
+        bottom: 4,
+        right: 4,
         width: 100,
         height: 150,
         borderRadius: 12,
@@ -990,6 +1102,16 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     },
 
+    progressFixed: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        backgroundColor: BG,
+        paddingHorizontal: 5,
+        paddingTop: 8,
+        paddingBottom: 8,
+        zIndex: 100,
+    },
     progressWrap: {
         backgroundColor: BG,
         paddingHorizontal: 5,
@@ -1027,7 +1149,7 @@ const styles = StyleSheet.create({
     },
 
     stepCard: {
-        marginHorizontal: 18,
+        marginHorizontal: 10,
         backgroundColor: WHITE,
         borderRadius: 14,
         borderLeftWidth: 4,
@@ -1093,22 +1215,14 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
 
-    bottomBar: {
+    fabBtn: {
         position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'transparent',
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 22,
-        paddingTop: 10,
-    },
-    circleBtn: {
-        width: 54,
-        height: 54,
-        borderRadius: 27,
-        backgroundColor: BRAND,
+        width: 50,
+        height: 50,
+        borderRadius: 14,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#E8EAED',
         alignItems: 'center',
         justifyContent: 'center',
         shadowColor: '#000',
@@ -1116,6 +1230,59 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 6 },
         elevation: 6,
+        zIndex: 301,
+    },
+    bottomTabBar: {
+        position: 'absolute',
+        left: 4,
+        right: 110,
+        bottom: 0,
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: '#E8EAED',
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        paddingTop: 5,
+        alignItems: 'flex-end',
+        justifyContent: 'space-around',
+        zIndex: 300,
+    },
+    bottomTabItem: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
+        gap: 2,
+    },
+    bottomTabItemCenter: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
+        marginTop: -18,
+        gap: 2,
+    },
+    bottomTabCenterIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: BRAND,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+    },
+    bottomTabLabel: {
+        fontSize: 10,
+        color: MUTED,
+        fontWeight: '600',
+    },
+    bottomTabTimer: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: BRAND,
     },
 
     modalBack: {
@@ -1124,6 +1291,97 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: 18,
+    },
+    guideCard: {
+        width: '100%',
+        backgroundColor: WHITE,
+        borderRadius: 18,
+        paddingHorizontal: 20,
+        paddingVertical: 24,
+    },
+    guideTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: TEXT,
+    },
+    guideSectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: BRAND,
+        marginBottom: 6,
+    },
+    guideItem: {
+        fontSize: 14,
+        color: TEXT,
+        lineHeight: 24,
+        paddingLeft: 2,
+    },
+    guideDivider: {
+        height: 1,
+        backgroundColor: '#E8EAED',
+        marginVertical: 14,
+    },
+    guideButtonRow: {
+        flexDirection: 'row',
+        gap: 10,
+    },
+    guideButtonGhost: {
+        flex: 1,
+        height: 44,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    guideButtonGhostText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: MUTED,
+    },
+    guideButtonFill: {
+        flex: 1,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: BRAND,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    guideButtonFillText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    guideTestWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        marginTop: 8,
+    },
+    guideTestCamera: {
+        width: 120,
+        height: 160,
+        borderRadius: 12,
+        overflow: 'hidden',
+        backgroundColor: '#000',
+        borderWidth: 2,
+        borderColor: BRAND,
+    },
+    guideTestResult: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    guideTestLabel: {
+        fontSize: 12,
+        color: MUTED,
+        marginBottom: 6,
+    },
+    guideTestGesture: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: BRAND,
+        textAlign: 'center',
     },
     modalCard: {
         width: '100%',
